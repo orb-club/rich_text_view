@@ -90,7 +90,7 @@ class _RichTextViewState extends State<RichTextView> {
         ? TextSpan()
         : TextSpan(
             children: [
-              TextSpan(text: ' \u2026'),
+              TextSpan(text: ' '),
               TextSpan(
                   text: _expanded ? widget.viewLessText : widget.viewMoreText,
                   recognizer: TapGestureRecognizer()
