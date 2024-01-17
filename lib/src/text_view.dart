@@ -95,9 +95,13 @@ class _RichTextViewState extends State<RichTextView> {
                   text: _expanded ? widget.viewLessText : widget.viewMoreText,
                   recognizer: TapGestureRecognizer()
                     ..onTap = () {
-                      setState(() {
-                        _expanded = !_expanded;
-                      });
+                      if (!_expanded && widget.onMore != null) {
+                        widget.onMore!();
+                      } else {
+                        setState(() {
+                          _expanded = !_expanded;
+                        });
+                      }
                     }),
             ],
             style: widget.viewMoreLessStyle ?? linkStyle,
