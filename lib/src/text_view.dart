@@ -90,7 +90,6 @@ class _RichTextViewState extends State<RichTextView> {
         ? TextSpan()
         : TextSpan(
             children: [
-              TextSpan(text: ' '),
               TextSpan(
                   text: _expanded ? widget.viewLessText : widget.viewMoreText,
                   recognizer: TapGestureRecognizer()
@@ -231,7 +230,16 @@ class _RichTextViewState extends State<RichTextView> {
                   ? parseText(widget.text)
                   : parseText(widget.text.substring(0, max(endIndex!, 0))),
               style: widget.style);
-          textSpan = TextSpan(children: [_text, link]);
+
+          final textEndsWithNewLine = _text.text?.endsWith('\n') ?? false;
+          textSpan = TextSpan(children: [
+            _text,
+            if (!textEndsWithNewLine)
+              TextSpan(
+                text: 'TEST',
+              ),
+            link,
+          ]);
         } else {
           textSpan = content;
         }
