@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:collection/collection.dart';
 
 import 'models.dart';
 
@@ -90,7 +91,6 @@ class _RichTextViewState extends State<RichTextView> {
         ? TextSpan()
         : TextSpan(
             children: [
-              TextSpan(text: ' '),
               TextSpan(
                   text: _expanded ? widget.viewLessText : widget.viewMoreText,
                   recognizer: TapGestureRecognizer()
@@ -226,12 +226,33 @@ class _RichTextViewState extends State<RichTextView> {
             textSize.height,
           ));
           final endIndex = textPainter.getOffsetBefore(pos.offset);
-          var _text = TextSpan(
-              children: _expanded
-                  ? parseText(widget.text)
-                  : parseText(widget.text.substring(0, max(endIndex!, 0))),
-              style: widget.style);
-          textSpan = TextSpan(children: [_text, link]);
+
+          final textChildren = _expanded
+              ? parseText(widget.text)
+              : parseText(widget.text.substring(0, max(endIndex!, 0)));
+
+          final lastTextSpan = textChildren
+              .lastWhereOrNull((child) => child is TextSpan) as TextSpan?;
+
+          final _text = TextSpan(
+            children: textChildren,
+            style: widget.style,
+          );
+
+          final textEndsWithNewLine =
+              lastTextSpan?.text?.endsWith('\n') ?? false;
+
+          textSpan = TextSpan(
+            children: [
+              _text,
+              if (!textEndsWithNewLine)
+                TextSpan(
+                  text: ' ',
+                  style: widget.style,
+                ),
+              link,
+            ],
+          );
         } else {
           textSpan = content;
         }
