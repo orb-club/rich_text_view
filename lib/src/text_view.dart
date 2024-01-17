@@ -247,7 +247,7 @@ class _RichTextViewState extends State<RichTextView> {
               _text,
               if (!textEndsWithNewLine)
                 TextSpan(
-                  text: 'TEST',
+                  text: ' ',
                   style: widget.style,
                 ),
               link,
