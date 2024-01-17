@@ -1,3 +1,6 @@
+##[1.5.0]
+- Support "-" character in URL pattern.
+
 ##[1.4.0]
 - Add `onMore` callback when the content is expanded.
 
