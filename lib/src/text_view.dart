@@ -245,12 +245,14 @@ class _RichTextViewState extends State<RichTextView> {
           textSpan = TextSpan(
             children: [
               _text,
-              if (!textEndsWithNewLine)
-                TextSpan(
-                  text: ' ',
-                  style: widget.style,
-                ),
-              link,
+              if (widget.toggleTruncate) ...[
+                if (!textEndsWithNewLine)
+                  TextSpan(
+                    text: ' ',
+                    style: widget.style,
+                  ),
+                link,
+              ],
             ],
           );
         } else {

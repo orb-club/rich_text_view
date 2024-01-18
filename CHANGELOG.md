@@ -1,3 +1,8 @@
+##[1.6.0]
+- Support `toggleTruncate` parameter for toggling "Show Less" and "Show More" options.
+- Remove horizontal ellipsis "..." before "Show More" and "Show Less" buttons.
+- Remove unnecessary white space if truncated text ends with newline.
+
 ##[1.5.0]
 - Support "-" character in URL pattern.
 
