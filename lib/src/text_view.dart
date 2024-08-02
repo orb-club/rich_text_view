@@ -40,6 +40,8 @@ class RichTextView extends StatefulWidget {
   final RegexOptions regexOptions;
   final TextAlign textAlign;
 
+  /// Whether to show "Show more" or "Show less" text
+  /// that truncates/expands the text.
   final bool toggleTruncate;
 
   RichTextView({
@@ -222,7 +224,7 @@ class _RichTextViewState extends State<RichTextView> {
         var textSpan;
         if (textPainter.didExceedMaxLines) {
           final pos = textPainter.getPositionForOffset(Offset(
-            textSize.width - linkSize.width,
+            textSize.width - (widget.toggleTruncate ? linkSize.width : 0),
             textSize.height,
           ));
           final endIndex = textPainter.getOffsetBefore(pos.offset);
