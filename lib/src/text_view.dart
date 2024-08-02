@@ -18,7 +18,6 @@ class RichTextView extends StatefulWidget {
   final TextStyle linkStyle;
   final TextDirection? textDirection;
   final bool softWrap;
-  final TextOverflow overflow;
   final double textScaleFactor;
   final int? maxLines;
   final StrutStyle? strutStyle;
@@ -40,8 +39,9 @@ class RichTextView extends StatefulWidget {
   final RegexOptions regexOptions;
   final TextAlign textAlign;
 
-  /// Whether to show "Show more" or "Show less" text
-  /// that truncates/expands the text.
+  /// Whether to show "Show more" or "Show less" link at the end
+  /// of the text. Tapping on the button will toggle the text
+  /// between truncated and expanded text.
   final bool toggleTruncate;
 
   RichTextView({
@@ -56,7 +56,6 @@ class RichTextView extends StatefulWidget {
     this.textAlign = TextAlign.start,
     this.textDirection = TextDirection.ltr,
     this.softWrap = true,
-    this.overflow = TextOverflow.clip,
     this.textScaleFactor = 1.0,
     this.strutStyle,
     this.textWidthBasis = TextWidthBasis.parent,
@@ -217,6 +216,11 @@ class _RichTextViewState extends State<RichTextView> {
         textPainter.layout(minWidth: constraints.minWidth, maxWidth: maxWidth);
         final linkSize = textPainter.size;
 
+        final ellipsis = '…';
+        textPainter.text = TextSpan(text: ellipsis, style: _style);
+        textPainter.layout(minWidth: constraints.minWidth, maxWidth: maxWidth);
+        final ellipsisSize = textPainter.size;
+
         textPainter.text = content;
         textPainter.layout(minWidth: constraints.minWidth, maxWidth: maxWidth);
         final textSize = textPainter.size;
@@ -224,14 +228,25 @@ class _RichTextViewState extends State<RichTextView> {
         var textSpan;
         if (textPainter.didExceedMaxLines) {
           final pos = textPainter.getPositionForOffset(Offset(
-            textSize.width - (widget.toggleTruncate ? linkSize.width : 0),
+            // "Show more"/"Show less" will be appended to the end of the text
+            // if `toggleTruncate` is true. Otherwise, ellipsis will be appended.
+            // Therefore, we need to subtract the width of the appended text
+            // from the total width of the text.
+            textSize.width -
+                (widget.toggleTruncate ? linkSize.width : ellipsisSize.width),
             textSize.height,
           ));
           final endIndex = textPainter.getOffsetBefore(pos.offset);
 
           final textChildren = _expanded
               ? parseText(widget.text)
-              : parseText(widget.text.substring(0, max(endIndex!, 0)));
+              : parseText(
+                  widget.text.substring(0, max(endIndex!, 0)) +
+                      // Append the ellipsis if `toggleTruncate` is false
+                      // (i.e. "Show more"/"Show less" is not shown)
+                      // and the text is truncated.
+                      (!widget.toggleTruncate ? ellipsis : ''),
+                );
 
           final lastTextSpan = textChildren
               .lastWhereOrNull((child) => child is TextSpan) as TextSpan?;
