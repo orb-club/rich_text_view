@@ -240,7 +240,13 @@ class _RichTextViewState extends State<RichTextView> {
 
           final textChildren = _expanded
               ? parseText(widget.text)
-              : parseText(widget.text.substring(0, max(endIndex!, 0)) + '…');
+              : parseText(
+                  widget.text.substring(0, max(endIndex!, 0)) +
+                      // Append the ellipsis if `toggleTruncate`
+                      // ("Show more"/"Show less" is not displayed)
+                      // and the text is truncated.
+                      (!widget.toggleTruncate ? ellipsis : ''),
+                );
 
           final lastTextSpan = textChildren
               .lastWhereOrNull((child) => child is TextSpan) as TextSpan?;
