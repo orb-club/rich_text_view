@@ -242,8 +242,8 @@ class _RichTextViewState extends State<RichTextView> {
               ? parseText(widget.text)
               : parseText(
                   widget.text.substring(0, max(endIndex!, 0)) +
-                      // Append the ellipsis if `toggleTruncate`
-                      // ("Show more"/"Show less" is not displayed)
+                      // Append the ellipsis if `toggleTruncate` is false
+                      // (i.e. "Show more"/"Show less" is not shown)
                       // and the text is truncated.
                       (!widget.toggleTruncate ? ellipsis : ''),
                 );
