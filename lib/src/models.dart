@@ -79,8 +79,6 @@ class Matched {
       'display: $display value: $value start: $start end: $end';
 }
 
-
-
 abstract class ParserType {
   /// If no [type] property is explicitly defined then this propery must be
   /// non null takes a [regex] string
@@ -95,6 +93,15 @@ abstract class ParserType {
   /// This lets you customise how you want the
   /// matched text to be displayed
   Matched Function({String? str})? renderText;
+
+  /// Can be used if you want a full control over how to render the matched text.
+  /// This method has a priority over [renderText].
+  InlineSpan Function({
+    required Matched matched,
+    String? str,
+    TextStyle? style,
+    TextStyle? linkStyle,
+  })? renderSpan;
 
   /// Creates a ParserType object
   ParserType({
