@@ -149,7 +149,20 @@ class _RichTextViewState extends State<RichTextView> {
           InlineSpan span;
 
           if (mapping != null) {
-            if (mapping.renderText != null) {
+            if (mapping.renderSpan != null) {
+              var matched = Matched(
+                display: matchText,
+                value: matchText,
+                start: match.start,
+                end: match.end,
+              );
+              span = mapping.renderSpan!(
+                str: matchText,
+                matched: matched,
+                style: _style,
+                linkStyle: linkStyle,
+              );
+            } else if (mapping.renderText != null) {
               var result = mapping.renderText!(str: matchText);
 
               result.start = match.start;
@@ -290,9 +303,9 @@ class _RichTextViewState extends State<RichTextView> {
         return RichText(
           textAlign: widget.textAlign,
           textDirection: widget.textDirection,
-          textScaleFactor: widget.textScaleFactor,
           text: textSpan,
           textWidthBasis: widget.textWidthBasis,
+          textScaler: TextScaler.linear(widget.textScaleFactor),
         );
       },
     );
