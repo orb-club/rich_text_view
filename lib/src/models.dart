@@ -103,12 +103,30 @@ abstract class ParserType {
     TextStyle? linkStyle,
   })? renderSpan;
 
+  /// This method is used for overriding the mapping from visible to the
+  /// original selection index.
+  /// This index is used for a custom selection behavior.
+  /// Use it when you are modifying the displayed text to properly handle
+  /// the copy action.
+  /// If not provided, the default mapping will be used.
+  void Function({
+    required String originalText,
+    required String visibleText,
+    required Map<int, int> visibleToOriginalIndexMap,
+    required int originalIndex,
+    required Function(int) updateOrinalIndex,
+    required int visibleIndex,
+    required Function(int) updateVisibleIndex,
+  })? visibleToOriginalSelectionMapper;
+
   /// Creates a ParserType object
   ParserType({
     this.pattern,
     this.style,
     this.onTap,
     this.renderText,
+    this.renderSpan,
+    this.visibleToOriginalSelectionMapper,
   });
 }
 

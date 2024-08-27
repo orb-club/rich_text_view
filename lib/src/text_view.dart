@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
+import 'package:flutter/services.dart';
 
 import 'models.dart';
 
@@ -77,6 +78,9 @@ class _RichTextViewState extends State<RichTextView> {
   late int? _maxLines;
   late TextStyle linkStyle;
 
+  // Map to keep track of visible to original index mapping
+  Map<int, int> visibleToOriginalIndexMap = {};
+
   @override
   void initState() {
     super.initState();
@@ -85,8 +89,32 @@ class _RichTextViewState extends State<RichTextView> {
     linkStyle = widget.linkStyle;
   }
 
+  // The default mapper for text selection.
+  //
+  // It uses a basic logic for mapping, where originalIndex is incremented
+  // at the same rate as visibleIndex.
+  // This can be used for any mapping that doesn't modify the original text.
+  void defaultVisibleToOriginalSelectionMapper({
+    required String originalText,
+    required Map<int, int> visibleToOriginalIndexMap,
+    required int originalIndex,
+    required Function(int) updateOrinalIndex,
+    required int visibleIndex,
+    required Function(int) updateVisibleIndex,
+  }) {
+    for (var i = 0; i < originalText.length; i++) {
+      visibleToOriginalIndexMap[visibleIndex] = originalIndex;
+      visibleIndex++;
+      originalIndex++;
+      updateVisibleIndex(visibleIndex);
+      updateOrinalIndex(originalIndex);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    visibleToOriginalIndexMap.clear();
+
     var _style = widget.style ?? Theme.of(context).textTheme.bodyMedium;
     var link = _expanded && widget.viewLessText == null
         ? TextSpan()
@@ -120,6 +148,8 @@ class _RichTextViewState extends State<RichTextView> {
       final pattern = '(${_mapping.keys.toList().join('|')})';
 
       var widgets = <InlineSpan>[];
+      var originalIndex = 0;
+      var visibleIndex = 0;
 
       newString.splitMapJoin(
         RegExp(
@@ -162,6 +192,38 @@ class _RichTextViewState extends State<RichTextView> {
                 style: _style,
                 linkStyle: linkStyle,
               );
+
+              // Get the rendered text.
+              final renderedText = span.toPlainText();
+
+              if (mapping.visibleToOriginalSelectionMapper != null) {
+                mapping.visibleToOriginalSelectionMapper!(
+                  originalText: matchText,
+                  visibleText: renderedText,
+                  visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+                  originalIndex: originalIndex,
+                  updateOrinalIndex: (int index) {
+                    originalIndex = index;
+                  },
+                  visibleIndex: visibleIndex,
+                  updateVisibleIndex: (int index) {
+                    visibleIndex = index;
+                  },
+                );
+              } else {
+                defaultVisibleToOriginalSelectionMapper(
+                  originalText: matchText,
+                  visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+                  originalIndex: originalIndex,
+                  updateOrinalIndex: (int index) {
+                    originalIndex = index;
+                  },
+                  visibleIndex: visibleIndex,
+                  updateVisibleIndex: (int index) {
+                    visibleIndex = index;
+                  },
+                );
+              }
             } else if (mapping.renderText != null) {
               var result = mapping.renderText!(str: matchText);
 
@@ -176,6 +238,37 @@ class _RichTextViewState extends State<RichTextView> {
                     : (TapGestureRecognizer()
                       ..onTap = () => mapping.onTap!(result)),
               );
+
+              final renderedText = span.toPlainText();
+
+              if (mapping.visibleToOriginalSelectionMapper != null) {
+                mapping.visibleToOriginalSelectionMapper!(
+                  originalText: matchText,
+                  visibleText: renderedText,
+                  visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+                  originalIndex: originalIndex,
+                  updateOrinalIndex: (int index) {
+                    originalIndex = index;
+                  },
+                  visibleIndex: visibleIndex,
+                  updateVisibleIndex: (int index) {
+                    visibleIndex = index;
+                  },
+                );
+              } else {
+                defaultVisibleToOriginalSelectionMapper(
+                  originalText: matchText,
+                  visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+                  originalIndex: originalIndex,
+                  updateOrinalIndex: (int index) {
+                    originalIndex = index;
+                  },
+                  visibleIndex: visibleIndex,
+                  updateVisibleIndex: (int index) {
+                    visibleIndex = index;
+                  },
+                );
+              }
             } else {
               var matched = Matched(
                   display: matchText,
@@ -190,17 +283,55 @@ class _RichTextViewState extends State<RichTextView> {
                     : (TapGestureRecognizer()
                       ..onTap = () => mapping.onTap!(matched)),
               );
+
+              defaultVisibleToOriginalSelectionMapper(
+                originalText: matchText,
+                visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+                originalIndex: originalIndex,
+                updateOrinalIndex: (int index) {
+                  originalIndex = index;
+                },
+                visibleIndex: visibleIndex,
+                updateVisibleIndex: (int index) {
+                  visibleIndex = index;
+                },
+              );
             }
           } else {
             span = TextSpan(
               text: '$matchText',
               style: _style,
             );
+            defaultVisibleToOriginalSelectionMapper(
+              originalText: matchText,
+              visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+              originalIndex: originalIndex,
+              updateOrinalIndex: (int index) {
+                originalIndex = index;
+              },
+              visibleIndex: visibleIndex,
+              updateVisibleIndex: (int index) {
+                visibleIndex = index;
+              },
+            );
           }
           widgets.add(span);
           return '';
         },
         onNonMatch: (String text) {
+          defaultVisibleToOriginalSelectionMapper(
+            originalText: text,
+            visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+            originalIndex: originalIndex,
+            updateOrinalIndex: (int index) {
+              originalIndex = index;
+            },
+            visibleIndex: visibleIndex,
+            updateVisibleIndex: (int index) {
+              visibleIndex = index;
+            },
+          );
+
           widgets.add(TextSpan(
             text: '$text',
             style: _style,
@@ -297,6 +428,10 @@ class _RichTextViewState extends State<RichTextView> {
             textAlign: widget.textAlign,
             textDirection: widget.textDirection,
             onTap: widget.onTap,
+            selectionControls: CustomTextSelectionControls(
+              originalText: widget.text,
+              visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+            ),
           );
         }
 
@@ -311,5 +446,35 @@ class _RichTextViewState extends State<RichTextView> {
     );
 
     return result;
+  }
+}
+
+class CustomTextSelectionControls extends MaterialTextSelectionControls {
+  CustomTextSelectionControls({
+    required this.originalText,
+    required this.visibleToOriginalIndexMap,
+  });
+
+  final String originalText;
+  final Map<int, int> visibleToOriginalIndexMap;
+
+  @override
+  void handleCopy(TextSelectionDelegate delegate) {
+    final startVisibleIndex = delegate.textEditingValue.selection.start;
+    final endVisibleIndex = delegate.textEditingValue.selection.end;
+
+    // Convert visible selection indices to original text indices
+    final startOriginalIndex =
+        visibleToOriginalIndexMap[startVisibleIndex] ?? 0;
+    final endOriginalIndex = visibleToOriginalIndexMap[endVisibleIndex];
+
+    final selectedText =
+        originalText.substring(startOriginalIndex, endOriginalIndex);
+
+    // Custom behavior or modification
+    var customText = selectedText;
+
+    // Copy to clipboard
+    Clipboard.setData(ClipboardData(text: customText));
   }
 }
