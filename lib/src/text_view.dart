@@ -89,6 +89,28 @@ class _RichTextViewState extends State<RichTextView> {
     linkStyle = widget.linkStyle;
   }
 
+  // The default mapper for text selection.
+  //
+  // It uses a basic logic for mapping, where originalIndex is incremented
+  // at the same rate as visibleIndex.
+  // This can be used for any mapping that doesn't modify the original text.
+  void defaultVisibleToOriginalSelectionMapper({
+    required String originalText,
+    required Map<int, int> visibleToOriginalIndexMap,
+    required int originalIndex,
+    required Function(int) updateOrinalIndex,
+    required int visibleIndex,
+    required Function(int) updateVisibleIndex,
+  }) {
+    for (var i = 0; i < originalText.length; i++) {
+      visibleToOriginalIndexMap[visibleIndex] = originalIndex;
+      visibleIndex++;
+      originalIndex++;
+      updateVisibleIndex(visibleIndex);
+      updateOrinalIndex(originalIndex);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     visibleToOriginalIndexMap.clear();
@@ -173,53 +195,34 @@ class _RichTextViewState extends State<RichTextView> {
 
               // Get the rendered text.
               final renderedText = span.toPlainText();
-              final lowerCaseLink = matchText.toLowerCase();
 
-              final isWithHttps = lowerCaseLink.startsWith('https://');
-              final isWithHttp = lowerCaseLink.startsWith('http://');
-              final isWithWww = lowerCaseLink.startsWith('www.') ||
-                  lowerCaseLink.startsWith('http://www.') ||
-                  lowerCaseLink.startsWith('https://www.');
-              var truncateOffset = 0;
-
-              if (renderedText.substring(renderedText.length - 3) == '...') {
-                truncateOffset = 3;
-              }
-
-              //offset for the icon
-              visibleToOriginalIndexMap[visibleIndex] = originalIndex;
-              visibleIndex++;
-              visibleToOriginalIndexMap[visibleIndex] = originalIndex;
-              visibleIndex++;
-
-              var tempOriginalIndex = originalIndex;
-
-              if (isWithHttps) {
-                tempOriginalIndex += 8;
-              }
-              if (isWithHttp) {
-                tempOriginalIndex += 7;
-              }
-
-              if (isWithWww) {
-                tempOriginalIndex += 4;
-              }
-
-              for (var i = 0;
-                  i < renderedText.length - 2 - truncateOffset;
-                  i++) {
-                if (i < matchText.length) {
-                  visibleToOriginalIndexMap[visibleIndex] =
-                      tempOriginalIndex + i;
-                }
-                visibleIndex++;
-              }
-
-              originalIndex += matchText.length;
-
-              for (var i = 0; i < truncateOffset; i++) {
-                visibleToOriginalIndexMap[visibleIndex] = originalIndex;
-                visibleIndex++;
+              if (mapping.visibleToOriginalSelectionMapper != null) {
+                mapping.visibleToOriginalSelectionMapper!(
+                  originalText: matchText,
+                  visibleText: renderedText,
+                  visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+                  originalIndex: originalIndex,
+                  updateOrinalIndex: (int index) {
+                    originalIndex = index;
+                  },
+                  visibleIndex: visibleIndex,
+                  updateVisibleIndex: (int index) {
+                    visibleIndex = index;
+                  },
+                );
+              } else {
+                defaultVisibleToOriginalSelectionMapper(
+                  originalText: matchText,
+                  visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+                  originalIndex: originalIndex,
+                  updateOrinalIndex: (int index) {
+                    originalIndex = index;
+                  },
+                  visibleIndex: visibleIndex,
+                  updateVisibleIndex: (int index) {
+                    visibleIndex = index;
+                  },
+                );
               }
             } else if (mapping.renderText != null) {
               var result = mapping.renderText!(str: matchText);
@@ -237,24 +240,35 @@ class _RichTextViewState extends State<RichTextView> {
               );
 
               final renderedText = span.toPlainText();
-              final matchPatternLength =
-                  matchText.split(result.display ?? '')[0].length;
 
-              visibleToOriginalIndexMap[visibleIndex] = originalIndex;
-              visibleIndex++;
-
-              final tempOriginalIndex = originalIndex + matchPatternLength;
-
-              for (var i = 1; i < renderedText.length; i++) {
-                if (i < matchText.length) {
-                  visibleToOriginalIndexMap[visibleIndex] =
-                      tempOriginalIndex + i;
-                }
-                visibleIndex++;
+              if (mapping.visibleToOriginalSelectionMapper != null) {
+                mapping.visibleToOriginalSelectionMapper!(
+                  originalText: matchText,
+                  visibleText: renderedText,
+                  visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+                  originalIndex: originalIndex,
+                  updateOrinalIndex: (int index) {
+                    originalIndex = index;
+                  },
+                  visibleIndex: visibleIndex,
+                  updateVisibleIndex: (int index) {
+                    visibleIndex = index;
+                  },
+                );
+              } else {
+                defaultVisibleToOriginalSelectionMapper(
+                  originalText: matchText,
+                  visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+                  originalIndex: originalIndex,
+                  updateOrinalIndex: (int index) {
+                    originalIndex = index;
+                  },
+                  visibleIndex: visibleIndex,
+                  updateVisibleIndex: (int index) {
+                    visibleIndex = index;
+                  },
+                );
               }
-              originalIndex += matchText.length;
-
-              visibleToOriginalIndexMap[visibleIndex] = originalIndex;
             } else {
               var matched = Matched(
                   display: matchText,
@@ -270,32 +284,53 @@ class _RichTextViewState extends State<RichTextView> {
                       ..onTap = () => mapping.onTap!(matched)),
               );
 
-              for (var i = 0; i < matchText.length; i++) {
-                visibleToOriginalIndexMap[visibleIndex] = originalIndex;
-                visibleIndex++;
-                originalIndex++;
-              }
+              defaultVisibleToOriginalSelectionMapper(
+                originalText: matchText,
+                visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+                originalIndex: originalIndex,
+                updateOrinalIndex: (int index) {
+                  originalIndex = index;
+                },
+                visibleIndex: visibleIndex,
+                updateVisibleIndex: (int index) {
+                  visibleIndex = index;
+                },
+              );
             }
           } else {
             span = TextSpan(
               text: '$matchText',
               style: _style,
             );
-            for (var i = 0; i < matchText.length; i++) {
-              visibleToOriginalIndexMap[visibleIndex] = originalIndex;
-              visibleIndex++;
-              originalIndex++;
-            }
+            defaultVisibleToOriginalSelectionMapper(
+              originalText: matchText,
+              visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+              originalIndex: originalIndex,
+              updateOrinalIndex: (int index) {
+                originalIndex = index;
+              },
+              visibleIndex: visibleIndex,
+              updateVisibleIndex: (int index) {
+                visibleIndex = index;
+              },
+            );
           }
           widgets.add(span);
           return '';
         },
         onNonMatch: (String text) {
-          for (var i = 0; i < text.length; i++) {
-            visibleToOriginalIndexMap[visibleIndex] = originalIndex;
-            visibleIndex++;
-            originalIndex++;
-          }
+          defaultVisibleToOriginalSelectionMapper(
+            originalText: text,
+            visibleToOriginalIndexMap: visibleToOriginalIndexMap,
+            originalIndex: originalIndex,
+            updateOrinalIndex: (int index) {
+              originalIndex = index;
+            },
+            visibleIndex: visibleIndex,
+            updateVisibleIndex: (int index) {
+              visibleIndex = index;
+            },
+          );
 
           widgets.add(TextSpan(
             text: '$text',
@@ -441,6 +476,5 @@ class CustomTextSelectionControls extends MaterialTextSelectionControls {
 
     // Copy to clipboard
     Clipboard.setData(ClipboardData(text: customText));
-    print(customText);
   }
 }
