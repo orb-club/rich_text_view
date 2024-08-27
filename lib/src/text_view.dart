@@ -98,7 +98,7 @@ class _RichTextViewState extends State<RichTextView> {
     required String originalText,
     required Map<int, int> visibleToOriginalIndexMap,
     required int originalIndex,
-    required Function(int) updateOrinalIndex,
+    required Function(int) updateOriginalIndex,
     required int visibleIndex,
     required Function(int) updateVisibleIndex,
   }) {
@@ -107,7 +107,7 @@ class _RichTextViewState extends State<RichTextView> {
       visibleIndex++;
       originalIndex++;
       updateVisibleIndex(visibleIndex);
-      updateOrinalIndex(originalIndex);
+      updateOriginalIndex(originalIndex);
     }
   }
 
@@ -202,7 +202,7 @@ class _RichTextViewState extends State<RichTextView> {
                   visibleText: renderedText,
                   visibleToOriginalIndexMap: visibleToOriginalIndexMap,
                   originalIndex: originalIndex,
-                  updateOrinalIndex: (int index) {
+                  updateOriginalIndex: (int index) {
                     originalIndex = index;
                   },
                   visibleIndex: visibleIndex,
@@ -215,7 +215,7 @@ class _RichTextViewState extends State<RichTextView> {
                   originalText: matchText,
                   visibleToOriginalIndexMap: visibleToOriginalIndexMap,
                   originalIndex: originalIndex,
-                  updateOrinalIndex: (int index) {
+                  updateOriginalIndex: (int index) {
                     originalIndex = index;
                   },
                   visibleIndex: visibleIndex,
@@ -247,7 +247,7 @@ class _RichTextViewState extends State<RichTextView> {
                   visibleText: renderedText,
                   visibleToOriginalIndexMap: visibleToOriginalIndexMap,
                   originalIndex: originalIndex,
-                  updateOrinalIndex: (int index) {
+                  updateOriginalIndex: (int index) {
                     originalIndex = index;
                   },
                   visibleIndex: visibleIndex,
@@ -260,7 +260,7 @@ class _RichTextViewState extends State<RichTextView> {
                   originalText: matchText,
                   visibleToOriginalIndexMap: visibleToOriginalIndexMap,
                   originalIndex: originalIndex,
-                  updateOrinalIndex: (int index) {
+                  updateOriginalIndex: (int index) {
                     originalIndex = index;
                   },
                   visibleIndex: visibleIndex,
@@ -288,7 +288,7 @@ class _RichTextViewState extends State<RichTextView> {
                 originalText: matchText,
                 visibleToOriginalIndexMap: visibleToOriginalIndexMap,
                 originalIndex: originalIndex,
-                updateOrinalIndex: (int index) {
+                updateOriginalIndex: (int index) {
                   originalIndex = index;
                 },
                 visibleIndex: visibleIndex,
@@ -306,7 +306,7 @@ class _RichTextViewState extends State<RichTextView> {
               originalText: matchText,
               visibleToOriginalIndexMap: visibleToOriginalIndexMap,
               originalIndex: originalIndex,
-              updateOrinalIndex: (int index) {
+              updateOriginalIndex: (int index) {
                 originalIndex = index;
               },
               visibleIndex: visibleIndex,
@@ -323,7 +323,7 @@ class _RichTextViewState extends State<RichTextView> {
             originalText: text,
             visibleToOriginalIndexMap: visibleToOriginalIndexMap,
             originalIndex: originalIndex,
-            updateOrinalIndex: (int index) {
+            updateOriginalIndex: (int index) {
               originalIndex = index;
             },
             visibleIndex: visibleIndex,
