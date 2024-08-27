@@ -114,7 +114,7 @@ abstract class ParserType {
     required String visibleText,
     required Map<int, int> visibleToOriginalIndexMap,
     required int originalIndex,
-    required Function(int) updateOrinalIndex,
+    required Function(int) updateOriginalIndex,
     required int visibleIndex,
     required Function(int) updateVisibleIndex,
   })? visibleToOriginalSelectionMapper;
