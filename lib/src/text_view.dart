@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
@@ -164,14 +165,20 @@ class _RichTextViewState extends State<RichTextView> {
 
           final mapping = _mapping[matchText!] ??
               _mapping[_mapping.keys.firstWhere((element) {
-                final reg = RegExp(
+                var ret = false;
+                RegExp(
                   element,
                   multiLine: widget.regexOptions.multiLine,
                   caseSensitive: widget.regexOptions.caseSensitive,
                   dotAll: widget.regexOptions.dotAll,
                   unicode: widget.regexOptions.unicode,
-                );
-                return reg.hasMatch(matchText);
+                ).allMatches(matchText).forEach((element) {
+                  if (element.group(0) == match[0]) {
+                    ret = true;
+                  }
+                });
+
+                return ret;
               }, orElse: () {
                 return '';
               })];
@@ -428,10 +435,7 @@ class _RichTextViewState extends State<RichTextView> {
             textAlign: widget.textAlign,
             textDirection: widget.textDirection,
             onTap: widget.onTap,
-            selectionControls: CustomTextSelectionControls(
-              originalText: widget.text,
-              visibleToOriginalIndexMap: visibleToOriginalIndexMap,
-            ),
+            contextMenuBuilder: contextMenuBuilder,
           );
         }
 
@@ -447,34 +451,52 @@ class _RichTextViewState extends State<RichTextView> {
 
     return result;
   }
-}
 
-class CustomTextSelectionControls extends MaterialTextSelectionControls {
-  CustomTextSelectionControls({
-    required this.originalText,
-    required this.visibleToOriginalIndexMap,
-  });
+  Widget contextMenuBuilder(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    final value = editableTextState.textEditingValue;
+    final selection = value.selection;
+    final copyItem = editableTextState.contextMenuButtonItems
+        .firstWhereOrNull(
+      (menuItem) => menuItem.type == ContextMenuButtonType.copy,
+    )
+        ?.copyWith(
+      // Override copy action to properly select original text.
+      onPressed: () {
+        final startVisibleIndex = selection.start;
+        final endVisibleIndex = selection.end;
 
-  final String originalText;
-  final Map<int, int> visibleToOriginalIndexMap;
+        // Convert visible selection indices to original text indices
+        final startOriginalIndex =
+            visibleToOriginalIndexMap[startVisibleIndex] ?? 0;
+        final endOriginalIndex = visibleToOriginalIndexMap[endVisibleIndex];
 
-  @override
-  void handleCopy(TextSelectionDelegate delegate) {
-    final startVisibleIndex = delegate.textEditingValue.selection.start;
-    final endVisibleIndex = delegate.textEditingValue.selection.end;
+        final selectedText =
+            widget.text.substring(startOriginalIndex, endOriginalIndex);
 
-    // Convert visible selection indices to original text indices
-    final startOriginalIndex =
-        visibleToOriginalIndexMap[startVisibleIndex] ?? 0;
-    final endOriginalIndex = visibleToOriginalIndexMap[endVisibleIndex];
+        var customText = selectedText;
+        print(customText);
 
-    final selectedText =
-        originalText.substring(startOriginalIndex, endOriginalIndex);
+        // Copy to clipboard
+        Clipboard.setData(ClipboardData(text: customText));
+      },
+    );
+    final otherButtonItems = editableTextState.contextMenuButtonItems
+        .where(
+          (menuItem) => menuItem.type != ContextMenuButtonType.copy,
+        )
+        .toList();
 
-    // Custom behavior or modification
-    var customText = selectedText;
+    final buttonItems = [
+      if (copyItem != null) copyItem,
+      ...otherButtonItems,
+    ];
 
-    // Copy to clipboard
-    Clipboard.setData(ClipboardData(text: customText));
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: editableTextState.contextMenuAnchors,
+      buttonItems: buttonItems,
+    );
   }
 }
