@@ -484,7 +484,9 @@ class _RichTextViewState extends State<RichTextView> {
         }
         final text = selectedText;
         Clipboard.setData(ClipboardData(text: text));
-        print(text);
+
+        // This part is copied from the default copy action in the editable text
+        // to properly close the toolbar and handles after copying.
         editableTextState
             .bringIntoView(editableTextState.textEditingValue.selection.extent);
         editableTextState.hideToolbar(false);
