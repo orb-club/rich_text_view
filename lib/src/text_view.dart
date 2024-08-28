@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
@@ -464,6 +465,9 @@ class _RichTextViewState extends State<RichTextView> {
         ?.copyWith(
       // Override copy action to properly select original text.
       onPressed: () {
+        if (selection.isCollapsed) {
+          return;
+        }
         final startVisibleIndex = selection.start;
         final endVisibleIndex = selection.end;
 
@@ -475,11 +479,33 @@ class _RichTextViewState extends State<RichTextView> {
         final selectedText =
             widget.text.substring(startOriginalIndex, endOriginalIndex);
 
-        var customText = selectedText;
-        print(customText);
+        if (selection.isCollapsed) {
+          return;
+        }
+        final text = selectedText;
+        Clipboard.setData(ClipboardData(text: text));
+        print(text);
+        editableTextState
+            .bringIntoView(editableTextState.textEditingValue.selection.extent);
+        editableTextState.hideToolbar(false);
 
-        // Copy to clipboard
-        Clipboard.setData(ClipboardData(text: customText));
+        switch (defaultTargetPlatform) {
+          case TargetPlatform.iOS:
+          case TargetPlatform.macOS:
+          case TargetPlatform.linux:
+          case TargetPlatform.windows:
+            break;
+          case TargetPlatform.android:
+          case TargetPlatform.fuchsia:
+            // Collapse the selection and hide the toolbar and handles.
+            editableTextState.userUpdateTextEditingValue(
+              TextEditingValue(
+                text: text,
+                selection: TextSelection.collapsed(offset: selection.end),
+              ),
+              SelectionChangedCause.toolbar,
+            );
+        }
       },
     );
     final otherButtonItems = editableTextState.contextMenuButtonItems
