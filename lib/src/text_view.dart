@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
@@ -164,14 +165,20 @@ class _RichTextViewState extends State<RichTextView> {
 
           final mapping = _mapping[matchText!] ??
               _mapping[_mapping.keys.firstWhere((element) {
-                final reg = RegExp(
+                var ret = false;
+                RegExp(
                   element,
                   multiLine: widget.regexOptions.multiLine,
                   caseSensitive: widget.regexOptions.caseSensitive,
                   dotAll: widget.regexOptions.dotAll,
                   unicode: widget.regexOptions.unicode,
-                );
-                return reg.hasMatch(matchText);
+                ).allMatches(matchText).forEach((element) {
+                  if (element.group(0) == match[0]) {
+                    ret = true;
+                  }
+                });
+
+                return ret;
               }, orElse: () {
                 return '';
               })];
@@ -428,10 +435,7 @@ class _RichTextViewState extends State<RichTextView> {
             textAlign: widget.textAlign,
             textDirection: widget.textDirection,
             onTap: widget.onTap,
-            selectionControls: CustomTextSelectionControls(
-              originalText: widget.text,
-              visibleToOriginalIndexMap: visibleToOriginalIndexMap,
-            ),
+            contextMenuBuilder: contextMenuBuilder,
           );
         }
 
@@ -447,34 +451,79 @@ class _RichTextViewState extends State<RichTextView> {
 
     return result;
   }
-}
 
-class CustomTextSelectionControls extends MaterialTextSelectionControls {
-  CustomTextSelectionControls({
-    required this.originalText,
-    required this.visibleToOriginalIndexMap,
-  });
+  Widget contextMenuBuilder(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    final value = editableTextState.textEditingValue;
+    final selection = value.selection;
+    final copyItem = editableTextState.contextMenuButtonItems
+        .firstWhereOrNull(
+      (menuItem) => menuItem.type == ContextMenuButtonType.copy,
+    )
+        ?.copyWith(
+      // Override copy action to properly select original text.
+      onPressed: () {
+        if (selection.isCollapsed) {
+          return;
+        }
+        final startVisibleIndex = selection.start;
+        final endVisibleIndex = selection.end;
 
-  final String originalText;
-  final Map<int, int> visibleToOriginalIndexMap;
+        // Convert visible selection indices to original text indices
+        final startOriginalIndex =
+            visibleToOriginalIndexMap[startVisibleIndex] ?? 0;
+        final endOriginalIndex = visibleToOriginalIndexMap[endVisibleIndex];
 
-  @override
-  void handleCopy(TextSelectionDelegate delegate) {
-    final startVisibleIndex = delegate.textEditingValue.selection.start;
-    final endVisibleIndex = delegate.textEditingValue.selection.end;
+        final selectedText =
+            widget.text.substring(startOriginalIndex, endOriginalIndex);
 
-    // Convert visible selection indices to original text indices
-    final startOriginalIndex =
-        visibleToOriginalIndexMap[startVisibleIndex] ?? 0;
-    final endOriginalIndex = visibleToOriginalIndexMap[endVisibleIndex];
+        if (selection.isCollapsed) {
+          return;
+        }
+        final text = selectedText;
+        Clipboard.setData(ClipboardData(text: text));
 
-    final selectedText =
-        originalText.substring(startOriginalIndex, endOriginalIndex);
+        // This part is copied from the default copy action in the editable text
+        // to properly close the toolbar and handles after copying.
+        editableTextState
+            .bringIntoView(editableTextState.textEditingValue.selection.extent);
+        editableTextState.hideToolbar(false);
 
-    // Custom behavior or modification
-    var customText = selectedText;
+        switch (defaultTargetPlatform) {
+          case TargetPlatform.iOS:
+          case TargetPlatform.macOS:
+          case TargetPlatform.linux:
+          case TargetPlatform.windows:
+            break;
+          case TargetPlatform.android:
+          case TargetPlatform.fuchsia:
+            // Collapse the selection and hide the toolbar and handles.
+            editableTextState.userUpdateTextEditingValue(
+              TextEditingValue(
+                text: text,
+                selection: TextSelection.collapsed(offset: selection.end),
+              ),
+              SelectionChangedCause.toolbar,
+            );
+        }
+      },
+    );
+    final otherButtonItems = editableTextState.contextMenuButtonItems
+        .where(
+          (menuItem) => menuItem.type != ContextMenuButtonType.copy,
+        )
+        .toList();
 
-    // Copy to clipboard
-    Clipboard.setData(ClipboardData(text: customText));
+    final buttonItems = [
+      if (copyItem != null) copyItem,
+      ...otherButtonItems,
+    ];
+
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: editableTextState.contextMenuAnchors,
+      buttonItems: buttonItems,
+    );
   }
 }
