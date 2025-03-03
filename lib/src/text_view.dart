@@ -41,6 +41,9 @@ class RichTextView extends StatefulWidget {
   final RegexOptions regexOptions;
   final TextAlign textAlign;
 
+  /// A prefix widget to display before the text.
+  final WidgetSpan? prefixWidgetSpan;
+
   /// Whether to show "Show more" or "Show less" link at the end
   /// of the text. Tapping on the button will toggle the text
   /// between truncated and expanded text.
@@ -68,6 +71,7 @@ class RichTextView extends StatefulWidget {
     this.viewLessText,
     this.viewMoreLessStyle,
     this.selectable = false,
+    this.prefixWidgetSpan,
   }) : super(key: key);
 
   @override
@@ -372,12 +376,22 @@ class _RichTextViewState extends State<RichTextView> {
         textPainter.layout(minWidth: constraints.minWidth, maxWidth: maxWidth);
         final ellipsisSize = textPainter.size;
 
-        textPainter.text = content;
+        // Create a TextSpan that includes the prefixWidgetSpan to measure total size
+        final fullTextSpan = TextSpan(
+          children: [
+            if (widget.prefixWidgetSpan != null) widget.prefixWidgetSpan!,
+            content,
+          ],
+        );
+
+        textPainter.text = fullTextSpan;
         textPainter.layout(minWidth: constraints.minWidth, maxWidth: maxWidth);
         final textSize = textPainter.size;
+        final exceedsMaxLines = textPainter.didExceedMaxLines;
 
         var textSpan;
-        if (textPainter.didExceedMaxLines) {
+        if (exceedsMaxLines) {
+          // Calculate position considering the prefixWidgetSpan
           final pos = textPainter.getPositionForOffset(Offset(
             // "Show more"/"Show less" will be appended to the end of the text
             // if `toggleTruncate` is true. Otherwise, ellipsis will be appended.
@@ -389,10 +403,26 @@ class _RichTextViewState extends State<RichTextView> {
           ));
           final endIndex = textPainter.getOffsetBefore(pos.offset);
 
+          // Get the prefix width if it exists
+          // ignore: omit_local_variable_types
+          double prefixWidth = 0;
+          if (widget.prefixWidgetSpan != null) {
+            final prefixPainter = TextPainter(
+              text: TextSpan(children: [widget.prefixWidgetSpan!]),
+              textDirection: widget.textDirection,
+            );
+            prefixPainter.layout(minWidth: 0, maxWidth: maxWidth);
+            prefixWidth = prefixPainter.width;
+          }
+
+          // Adjust the endIndex to account for the prefix
+          final adjustedEndIndex =
+              max(0, endIndex! - (prefixWidth > 0 ? 1 : 0));
+
           final textChildren = _expanded
               ? parseText(widget.text)
               : parseText(
-                  widget.text.substring(0, max(endIndex!, 0)) +
+                  widget.text.substring(0, adjustedEndIndex) +
                       // Append the ellipsis if `toggleTruncate` is false
                       // (i.e. "Show more"/"Show less" is not shown)
                       // and the text is truncated.
@@ -412,6 +442,7 @@ class _RichTextViewState extends State<RichTextView> {
 
           textSpan = TextSpan(
             children: [
+              if (widget.prefixWidgetSpan != null) widget.prefixWidgetSpan!,
               _text,
               if (widget.toggleTruncate) ...[
                 if (!textEndsWithNewLine)
@@ -424,7 +455,13 @@ class _RichTextViewState extends State<RichTextView> {
             ],
           );
         } else {
-          textSpan = content;
+          textSpan = TextSpan(
+            children: [
+              if (widget.prefixWidgetSpan != null) widget.prefixWidgetSpan!,
+              ...content.children ?? [content],
+            ],
+            style: content.style,
+          );
         }
 
         if (widget.selectable) {
