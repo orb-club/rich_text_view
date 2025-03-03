@@ -28,6 +28,7 @@ class RichTextView extends StatefulWidget {
   final GestureTapCallback? onTap;
   final Function()? onMore;
   final bool truncate;
+  final double? prefixIconWidth;
 
   /// the view more text if `truncate` is true
   final String viewMoreText;
@@ -40,6 +41,9 @@ class RichTextView extends StatefulWidget {
   final List<ParserType> supportedTypes;
   final RegexOptions regexOptions;
   final TextAlign textAlign;
+
+  /// A prefix widget to display before the text.
+  final WidgetSpan? prefixWidgetSpan;
 
   /// Whether to show "Show more" or "Show less" link at the end
   /// of the text. Tapping on the button will toggle the text
@@ -68,6 +72,8 @@ class RichTextView extends StatefulWidget {
     this.viewLessText,
     this.viewMoreLessStyle,
     this.selectable = false,
+    this.prefixWidgetSpan,
+    this.prefixIconWidth,
   }) : super(key: key);
 
   @override
@@ -372,27 +378,47 @@ class _RichTextViewState extends State<RichTextView> {
         textPainter.layout(minWidth: constraints.minWidth, maxWidth: maxWidth);
         final ellipsisSize = textPainter.size;
 
+        // First measure content without the prefix to avoid WidgetSpan dimension issues
         textPainter.text = content;
         textPainter.layout(minWidth: constraints.minWidth, maxWidth: maxWidth);
-        final textSize = textPainter.size;
+        final contentSize = textPainter.size;
+        final contentExceedsMaxLines = textPainter.didExceedMaxLines;
+
+        // Estimate prefix width instead of directly measuring the WidgetSpan
+        final prefixWidth = widget.prefixIconWidth ?? 0;
+
+        // Determine if text will exceed max lines with the prefix
+        final exceedsMaxLines = contentExceedsMaxLines ||
+            (widget.prefixWidgetSpan != null &&
+                _maxLines != null &&
+                contentSize.height + (prefixWidth > 0 ? 5.0 : 0) >
+                    textPainter.preferredLineHeight * _maxLines!);
 
         var textSpan;
-        if (textPainter.didExceedMaxLines) {
+        if (exceedsMaxLines) {
+          // Calculate position for truncation
+          final availableWidth = maxWidth -
+              // "Show more"/"Show less" will be appended to the end of the text
+              // if `toggleTruncate` is true. Otherwise, ellipsis will be appended.
+              // Therefore, we need to subtract the width of the appended text
+              // from the total width of the text.
+              (widget.toggleTruncate ? linkSize.width : ellipsisSize.width) -
+              prefixWidth;
+
+          // Adjust the calculation to account for prefix width
           final pos = textPainter.getPositionForOffset(Offset(
-            // "Show more"/"Show less" will be appended to the end of the text
-            // if `toggleTruncate` is true. Otherwise, ellipsis will be appended.
-            // Therefore, we need to subtract the width of the appended text
-            // from the total width of the text.
-            textSize.width -
-                (widget.toggleTruncate ? linkSize.width : ellipsisSize.width),
-            textSize.height,
+            min(contentSize.width, availableWidth),
+            contentSize.height,
           ));
           final endIndex = textPainter.getOffsetBefore(pos.offset);
+
+          // Adjust the endIndex to account for the prefix
+          final adjustedEndIndex = max(0, endIndex ?? 0);
 
           final textChildren = _expanded
               ? parseText(widget.text)
               : parseText(
-                  widget.text.substring(0, max(endIndex!, 0)) +
+                  widget.text.substring(0, adjustedEndIndex) +
                       // Append the ellipsis if `toggleTruncate` is false
                       // (i.e. "Show more"/"Show less" is not shown)
                       // and the text is truncated.
@@ -412,6 +438,7 @@ class _RichTextViewState extends State<RichTextView> {
 
           textSpan = TextSpan(
             children: [
+              if (widget.prefixWidgetSpan != null) widget.prefixWidgetSpan!,
               _text,
               if (widget.toggleTruncate) ...[
                 if (!textEndsWithNewLine)
@@ -424,7 +451,13 @@ class _RichTextViewState extends State<RichTextView> {
             ],
           );
         } else {
-          textSpan = content;
+          textSpan = TextSpan(
+            children: [
+              if (widget.prefixWidgetSpan != null) widget.prefixWidgetSpan!,
+              ...content.children ?? [content],
+            ],
+            style: content.style,
+          );
         }
 
         if (widget.selectable) {
