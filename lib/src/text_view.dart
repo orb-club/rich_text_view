@@ -392,7 +392,8 @@ class _RichTextViewState extends State<RichTextView> {
             // Therefore, we need to subtract the width of the appended text
             // from the total width of the text.
             textSize.width -
-                (widget.toggleTruncate ? linkSize.width : ellipsisSize.width),
+                (widget.toggleTruncate ? linkSize.width : ellipsisSize.width) -
+                (widget.prefixIcon != null ? widget.prefixIconWidth! : 0),
             textSize.height,
           ));
           final endIndex = textPainter.getOffsetBefore(pos.offset);
