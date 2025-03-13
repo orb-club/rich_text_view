@@ -46,6 +46,9 @@ class RichTextView extends StatefulWidget {
   /// between truncated and expanded text.
   final bool toggleTruncate;
 
+  final WidgetSpan? prefixIcon;
+  final double? prefixIconWidth;
+
   RichTextView({
     Key? key,
     required this.text,
@@ -68,6 +71,8 @@ class RichTextView extends StatefulWidget {
     this.viewLessText,
     this.viewMoreLessStyle,
     this.selectable = false,
+    this.prefixIcon,
+    this.prefixIconWidth,
   }) : super(key: key);
 
   @override
@@ -350,7 +355,10 @@ class _RichTextViewState extends State<RichTextView> {
       return widgets;
     }
 
-    final content = TextSpan(children: parseText(widget.text), style: _style);
+    final content = TextSpan(children: [
+      if (widget.prefixIcon != null) widget.prefixIcon!,
+      ...parseText(widget.text),
+    ], style: _style);
 
     Widget result = LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -384,7 +392,8 @@ class _RichTextViewState extends State<RichTextView> {
             // Therefore, we need to subtract the width of the appended text
             // from the total width of the text.
             textSize.width -
-                (widget.toggleTruncate ? linkSize.width : ellipsisSize.width),
+                (widget.toggleTruncate ? linkSize.width : ellipsisSize.width) -
+                (widget.prefixIcon != null ? widget.prefixIconWidth! : 0),
             textSize.height,
           ));
           final endIndex = textPainter.getOffsetBefore(pos.offset);
