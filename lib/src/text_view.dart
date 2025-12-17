@@ -413,7 +413,30 @@ class _RichTextViewState extends State<RichTextView> {
           final endIndex = textPainter.getOffsetBefore(pos.offset);
 
           // Adjust the endIndex to account for the prefix
-          final adjustedEndIndex = max(0, endIndex ?? 0);
+          var adjustedEndIndex = max(0, endIndex ?? 0);
+
+          // Check if we're cutting in the middle of an emoji/grapheme cluster.
+          if (adjustedEndIndex > 0 && adjustedEndIndex < widget.text.length) {
+            // Just check if substring ends with a surrogate.
+            final testSub = widget.text.substring(0, adjustedEndIndex);
+
+            if (testSub.isNotEmpty) {
+              final lastCodeUnit = testSub.codeUnitAt(testSub.length - 1);
+
+              // Check if it's a UTF-16 surrogate (high or low).
+              // https://github.com/flutter/flutter/blob/248d746575b713da74144750527356a1c0095546/packages/flutter/lib/src/painting/text_painter.dart#L603
+              bool isUtf16Surrogate = (lastCodeUnit & 0xF800) == 0xD800;
+
+              if (isUtf16Surrogate) {
+                // We're in the middle of a character, take one more complete character.
+                final charCount =
+                    testSub.substring(0, testSub.length - 1).characters.length;
+
+                adjustedEndIndex =
+                    widget.text.characters.take(charCount + 1).string.length;
+              }
+            }
+          }
 
           final textChildren = _expanded
               ? parseText(widget.text)

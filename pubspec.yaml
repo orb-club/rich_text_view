@@ -1,6 +1,6 @@
 name: rich_text_view
 description: A simple yet powerful rich text view that supports mention, hashtag, email, url and see more.
-version: 1.11.0
+version: 1.12.0
 homepage: https://github.com/nelsonweze/rich_text_view
 
 environment:
@@ -17,4 +17,3 @@ dev_dependencies:
   pedantic: ^1.11.0
 
 flutter:
-
