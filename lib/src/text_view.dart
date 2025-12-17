@@ -417,16 +417,18 @@ class _RichTextViewState extends State<RichTextView> {
 
           // Check if we're cutting in the middle of an emoji/grapheme cluster.
           if (adjustedEndIndex > 0 && adjustedEndIndex < widget.text.length) {
-            // Take substring and convert to Characters to check if we broke an emoji
-            final beforeCut = widget.text.substring(0, adjustedEndIndex);
-            final beforeCutChars = beforeCut.characters;
+            // Just check if substring creates a broken character (replacement character).
+            final testSub = widget.text.substring(0, adjustedEndIndex);
 
-            // If converting to characters changes the length, we're in an emoji.
-            if (beforeCutChars.string.length != adjustedEndIndex) {
-              // Simply take one more complete character.
-              final completeText =
-                  widget.text.characters.take(beforeCutChars.length + 1).string;
-              adjustedEndIndex = completeText.length;
+            // If the last char is a replacement character, we broke an emoji
+            if (testSub.isNotEmpty && testSub[testSub.length - 1] == '\uFFFD') {
+              // Count complete characters in what we have (excluding the broken one).
+              final validPart = testSub.substring(0, testSub.length - 1);
+              final charCount = validPart.characters.length;
+
+              // Take one more complete character.
+              adjustedEndIndex =
+                  widget.text.characters.take(charCount + 1).string.length;
             }
           }
 
