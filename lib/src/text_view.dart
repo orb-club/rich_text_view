@@ -413,7 +413,22 @@ class _RichTextViewState extends State<RichTextView> {
           final endIndex = textPainter.getOffsetBefore(pos.offset);
 
           // Adjust the endIndex to account for the prefix
-          final adjustedEndIndex = max(0, endIndex ?? 0);
+          var adjustedEndIndex = max(0, endIndex ?? 0);
+
+          // Check if we're cutting in the middle of an emoji/grapheme cluster.
+          if (adjustedEndIndex > 0 && adjustedEndIndex < widget.text.length) {
+            // Take substring and convert to Characters to check if we broke an emoji
+            final beforeCut = widget.text.substring(0, adjustedEndIndex);
+            final beforeCutChars = beforeCut.characters;
+
+            // If converting to characters changes the length, we're in an emoji.
+            if (beforeCutChars.string.length != adjustedEndIndex) {
+              // Simply take one more complete character.
+              final completeText =
+                  widget.text.characters.take(beforeCutChars.length + 1).string;
+              adjustedEndIndex = completeText.length;
+            }
+          }
 
           final textChildren = _expanded
               ? parseText(widget.text)
