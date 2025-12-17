@@ -417,18 +417,24 @@ class _RichTextViewState extends State<RichTextView> {
 
           // Check if we're cutting in the middle of an emoji/grapheme cluster.
           if (adjustedEndIndex > 0 && adjustedEndIndex < widget.text.length) {
-            // Just check if substring creates a broken character (replacement character).
+            // Just check if substring ends with a surrogate.
             final testSub = widget.text.substring(0, adjustedEndIndex);
 
-            // If the last char is a replacement character, we broke an emoji
-            if (testSub.isNotEmpty && testSub[testSub.length - 1] == '\uFFFD') {
-              // Count complete characters in what we have (excluding the broken one).
-              final validPart = testSub.substring(0, testSub.length - 1);
-              final charCount = validPart.characters.length;
+            if (testSub.isNotEmpty) {
+              final lastCodeUnit = testSub.codeUnitAt(testSub.length - 1);
 
-              // Take one more complete character.
-              adjustedEndIndex =
-                  widget.text.characters.take(charCount + 1).string.length;
+              // Check if it's a UTF-16 surrogate (high or low).
+              // https://github.com/flutter/flutter/blob/248d746575b713da74144750527356a1c0095546/packages/flutter/lib/src/painting/text_painter.dart#L603
+              bool isUtf16Surrogate = (lastCodeUnit & 0xF800) == 0xD800;
+
+              if (isUtf16Surrogate) {
+                // We're in the middle of a character, take one more complete character.
+                final charCount =
+                    testSub.substring(0, testSub.length - 1).characters.length;
+
+                adjustedEndIndex =
+                    widget.text.characters.take(charCount + 1).string.length;
+              }
             }
           }
 
