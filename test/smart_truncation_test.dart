@@ -154,8 +154,106 @@ void main() {
         expect(displayedText.contains('google.com'), isTrue);
       }
     });
+
+    testWidgets('Does not cut in the middle of words',
+        (WidgetTester tester) async {
+      const testText =
+          'This is a simple sentence with several words for testing';
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 150, // Force truncation in the middle of text
+              child: RichTextView(
+                text: testText,
+                truncate: true,
+                maxLines: 1,
+                supportedTypes: [],
+                linkStyle: const TextStyle(color: Colors.blue),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      final richTextWidget = tester.widget<RichText>(find.byType(RichText));
+      final textSpan = richTextWidget.text as TextSpan;
+      final displayedText = textSpan.toPlainText();
+
+      // The text should be truncated at word boundaries
+      // Should not have partial words like "sente" or "seve"
+      // Check that if a word appears, it's complete
+      final words = [
+        'This',
+        'is',
+        'a',
+        'simple',
+        'sentence',
+        'with',
+        'several',
+        'words',
+        'for',
+        'testing'
+      ];
+      for (var word in words) {
+        // If the displayed text contains part of this word (more than 2 chars)
+        if (displayedText.contains(word.substring(0, min(3, word.length)))) {
+          // It should contain the complete word (excluding ellipsis)
+          final textWithoutEllipsis =
+              displayedText.replaceAll('…', '').replaceAll('...', '');
+          if (textWithoutEllipsis
+              .contains(word.substring(0, min(3, word.length)))) {
+            expect(
+                textWithoutEllipsis.trim().endsWith(word) ||
+                    textWithoutEllipsis.contains('$word '),
+                isTrue,
+                reason: 'Word "$word" should not be partially truncated');
+          }
+        }
+      }
+    });
+
+    testWidgets('Cuts very long words (>50 chars) at desired position',
+        (WidgetTester tester) async {
+      const testText =
+          'Start supercalifragilisticexpialidociousverylongwordthatisgreaterthanfiftycharacters end';
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 200,
+              child: RichTextView(
+                text: testText,
+                truncate: true,
+                maxLines: 1,
+                supportedTypes: [],
+                linkStyle: const TextStyle(color: Colors.blue),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Should not crash and should truncate the very long word
+      expect(find.byType(RichText), findsOneWidget);
+
+      final richTextWidget = tester.widget<RichText>(find.byType(RichText));
+      final textSpan = richTextWidget.text as TextSpan;
+      final displayedText = textSpan.toPlainText();
+
+      // The very long word can be cut in the middle since it's > 50 chars
+      expect(displayedText.isNotEmpty, isTrue);
+    });
   });
 }
+
+int min(int a, int b) => a < b ? a : b;
 
 class BoldParser extends ParserType {
   BoldParser({

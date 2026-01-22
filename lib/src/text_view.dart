@@ -25,18 +25,19 @@ class _PatternMatch {
   bool contains(int index) => index >= start && index < end;
 }
 
-/// Finds a safe truncation index that doesn't break markdown formatting or URLs.
+/// Finds a safe truncation index that doesn't break markdown formatting, URLs, or words.
 ///
 /// This function ensures that truncation doesn't happen:
-/// 1. In the middle of a URL - cuts before the URL to avoid broken links
+/// 1. In the middle of a URL - includes the entire URL (UrlParser handles shortening)
 /// 2. In the middle of markdown formatting tags - cuts before or after the formatted section
+/// 3. In the middle of a word - cuts at the end of the word (if word is < 50 characters)
 ///
 /// [text] - The original text to truncate
 /// [desiredIndex] - The initial truncation index calculated by TextPainter
 /// [supportedTypes] - The list of parser types (contains regex patterns)
 /// [regexOptions] - Regex options for pattern matching
 ///
-/// Returns an adjusted index that respects markdown and URL boundaries.
+/// Returns an adjusted index that respects markdown, URL, and word boundaries.
 int _findSafeTruncationIndex(
   String text,
   int desiredIndex,
@@ -155,8 +156,54 @@ int _findSafeTruncationIndex(
     }
   }
 
-  // No problematic match found, return the original index
-  return desiredIndex;
+  // Check if we're cutting in the middle of a word
+  // If so, cut at the end of the word (if it's not too long, i.e., < 50 chars)
+  var adjustedIndex = desiredIndex;
+
+  // Find the start of the current word by going backwards
+  var wordStart = desiredIndex;
+  while (wordStart > 0 && !_isWordBoundary(text[wordStart - 1])) {
+    wordStart--;
+  }
+
+  // Find the end of the current word by going forwards
+  var wordEnd = desiredIndex;
+  while (wordEnd < text.length && !_isWordBoundary(text[wordEnd])) {
+    wordEnd++;
+  }
+
+  // Calculate word length
+  final wordLength = wordEnd - wordStart;
+
+  // If we're in the middle of a word and the word is not too long (< 50 chars),
+  // cut at the end of the word instead
+  if (wordLength > 0 &&
+      wordLength < 50 &&
+      desiredIndex > wordStart &&
+      desiredIndex < wordEnd) {
+    adjustedIndex = wordEnd;
+  }
+
+  return adjustedIndex;
+}
+
+/// Helper function to check if a character is a word boundary
+bool _isWordBoundary(String char) {
+  // Word boundaries: space, newline, tab, punctuation (except hyphen and apostrophe within words)
+  return char == ' ' ||
+      char == '\n' ||
+      char == '\t' ||
+      char == '.' ||
+      char == ',' ||
+      char == '!' ||
+      char == '?' ||
+      char == ';' ||
+      char == ':' ||
+      char == ')' ||
+      char == ']' ||
+      char == '}' ||
+      char == '"' ||
+      char == "'";
 }
 
 /// Creates a [RichText] widget that supports emails, mentions, hashtags and more.
