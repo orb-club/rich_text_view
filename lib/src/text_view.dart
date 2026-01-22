@@ -116,10 +116,10 @@ int _findSafeTruncationIndex(
   // Check if desiredIndex falls within any match
   for (var match in matches) {
     if (match.contains(desiredIndex)) {
-      // If it's a URL, always cut before it to avoid partial URLs
+      // For URLs, always include the entire URL
+      // The UrlParser will handle shortening it with its built-in truncation
       if (match.isUrl) {
-        // Cut before the URL, but leave at least some space
-        return max(0, match.start);
+        return match.end;
       }
 
       // For formatting (bold, italic, etc.), cut before the opening tag
@@ -146,6 +146,11 @@ int _findSafeTruncationIndex(
     if (desiredIndex > match.start &&
         desiredIndex < match.end &&
         match.end - desiredIndex <= 3) {
+      // For URLs, always include them
+      if (match.isUrl) {
+        return match.end;
+      }
+      // For formatting, include the complete formatted section
       return match.end;
     }
   }

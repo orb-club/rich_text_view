@@ -4,7 +4,7 @@ import 'package:rich_text_view/rich_text_view.dart';
 
 void main() {
   group('Smart Truncation Tests', () {
-    testWidgets('Truncates before URL when cut would be in the middle',
+    testWidgets('Includes full URL when truncation would occur in the middle',
         (WidgetTester tester) async {
       const testText =
           'Check this link https://google.com/very/long/path for more info';
@@ -30,15 +30,15 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // The text should be truncated before the URL, not in the middle
+      // The URL should be included entirely (UrlParser handles its own truncation)
       final richTextWidget = tester.widget<RichText>(find.byType(RichText));
       final textSpan = richTextWidget.text as TextSpan;
       final displayedText = textSpan.toPlainText();
 
-      // Should not contain partial URL
-      expect(displayedText.contains('https://google.com/very'), isFalse);
-      // Should either contain full URL or no URL at all
+      // Should contain the URL (either full or truncated by UrlParser with ...)
+      // but not cut mid-URL like "https://google.com/ve" without ellipsis
       if (displayedText.contains('https://')) {
+        // If URL is present, it should be complete
         expect(displayedText.contains('https://google.com/very/long/path'),
             isTrue);
       }
