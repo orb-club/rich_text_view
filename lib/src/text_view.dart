@@ -8,6 +8,152 @@ import 'package:flutter/services.dart';
 
 import 'models.dart';
 
+/// Represents a matched pattern in the text with its boundaries.
+class _PatternMatch {
+  final int start;
+  final int end;
+  final bool isUrl;
+  final bool isFormatting;
+
+  _PatternMatch({
+    required this.start,
+    required this.end,
+    required this.isUrl,
+    required this.isFormatting,
+  });
+
+  bool contains(int index) => index >= start && index < end;
+}
+
+/// Finds a safe truncation index that doesn't break markdown formatting or URLs.
+///
+/// This function ensures that truncation doesn't happen:
+/// 1. In the middle of a URL - cuts before the URL to avoid broken links
+/// 2. In the middle of markdown formatting tags - cuts before or after the formatted section
+///
+/// [text] - The original text to truncate
+/// [desiredIndex] - The initial truncation index calculated by TextPainter
+/// [supportedTypes] - The list of parser types (contains regex patterns)
+/// [regexOptions] - Regex options for pattern matching
+///
+/// Returns an adjusted index that respects markdown and URL boundaries.
+int _findSafeTruncationIndex(
+  String text,
+  int desiredIndex,
+  List<ParserType> supportedTypes,
+  RegexOptions regexOptions,
+) {
+  // Early return if index is at the end or beyond
+  if (desiredIndex >= text.length) {
+    return text.length;
+  }
+
+  // Early return if index is at the start
+  if (desiredIndex <= 0) {
+    return 0;
+  }
+
+  // Build regex pattern from all parser types
+  final patternStrings = <String>[];
+  final urlPatterns = <String>[];
+  final formattingPatterns = <String>[];
+
+  for (var type in supportedTypes) {
+    if (type.pattern != null && type.pattern!.isNotEmpty) {
+      patternStrings.add(type.pattern!);
+
+      // Identify URL patterns (typically contain http, www, or are very long)
+      if (type.pattern!.contains(r'http') ||
+          type.pattern!.contains(r'www') ||
+          type.pattern!.length > 100) {
+        urlPatterns.add(type.pattern!);
+      } else if (type.pattern!.contains(r'*') ||
+          type.pattern!.contains(r'_') ||
+          type.pattern!.contains(r'~')) {
+        // Formatting patterns contain *, _, or ~
+        formattingPatterns.add(type.pattern!);
+      }
+    }
+  }
+
+  if (patternStrings.isEmpty) {
+    return desiredIndex;
+  }
+
+  // Find all matches in the text
+  final matches = <_PatternMatch>[];
+
+  for (var pattern in patternStrings) {
+    try {
+      final regex = RegExp(
+        pattern,
+        multiLine: regexOptions.multiLine,
+        caseSensitive: regexOptions.caseSensitive,
+        dotAll: regexOptions.dotAll,
+        unicode: regexOptions.unicode,
+      );
+
+      final isUrl = urlPatterns.contains(pattern);
+      final isFormatting = formattingPatterns.contains(pattern);
+
+      for (var match in regex.allMatches(text)) {
+        matches.add(_PatternMatch(
+          start: match.start,
+          end: match.end,
+          isUrl: isUrl,
+          isFormatting: isFormatting,
+        ));
+      }
+    } catch (e) {
+      // Skip invalid regex patterns
+      continue;
+    }
+  }
+
+  // Sort matches by start position
+  matches.sort((a, b) => a.start.compareTo(b.start));
+
+  // Check if desiredIndex falls within any match
+  for (var match in matches) {
+    if (match.contains(desiredIndex)) {
+      // If it's a URL, always cut before it to avoid partial URLs
+      if (match.isUrl) {
+        // Cut before the URL, but leave at least some space
+        return max(0, match.start);
+      }
+
+      // For formatting (bold, italic, etc.), cut before the opening tag
+      if (match.isFormatting) {
+        // Try to cut before the match starts
+        // But if that would remove too much content, cut after the match
+        final cutBefore = match.start;
+        final cutAfter = match.end;
+
+        // If cutting before would remove less than 50% of desired content, cut before
+        // Otherwise, include the entire formatted section
+        if (cutBefore >= desiredIndex * 0.5) {
+          return cutBefore;
+        } else {
+          return cutAfter;
+        }
+      }
+    }
+  }
+
+  // If we're very close to the end of a match (within 3 characters),
+  // include the entire match to avoid awkward cuts like "**bol"
+  for (var match in matches) {
+    if (desiredIndex > match.start &&
+        desiredIndex < match.end &&
+        match.end - desiredIndex <= 3) {
+      return match.end;
+    }
+  }
+
+  // No problematic match found, return the original index
+  return desiredIndex;
+}
+
 /// Creates a [RichText] widget that supports emails, mentions, hashtags and more.
 ///
 /// When [viewLessText] is specified, toggling between view more and view less will be supported.
@@ -425,7 +571,7 @@ class _RichTextViewState extends State<RichTextView> {
 
               // Check if it's a UTF-16 surrogate (high or low).
               // https://github.com/flutter/flutter/blob/248d746575b713da74144750527356a1c0095546/packages/flutter/lib/src/painting/text_painter.dart#L603
-              bool isUtf16Surrogate = (lastCodeUnit & 0xF800) == 0xD800;
+              final isUtf16Surrogate = (lastCodeUnit & 0xF800) == 0xD800;
 
               if (isUtf16Surrogate) {
                 // We're in the middle of a character, take one more complete character.
@@ -438,10 +584,18 @@ class _RichTextViewState extends State<RichTextView> {
             }
           }
 
+          // Apply smart truncation to avoid cutting in the middle of URLs or markdown formatting
+          final safeTruncationIndex = _findSafeTruncationIndex(
+            widget.text,
+            adjustedEndIndex,
+            widget.supportedTypes,
+            widget.regexOptions,
+          );
+
           final textChildren = _expanded
               ? parseText(widget.text)
               : parseText(
-                  widget.text.substring(0, adjustedEndIndex) +
+                  widget.text.substring(0, safeTruncationIndex) +
                       // Append the ellipsis if `toggleTruncate` is false
                       // (i.e. "Show more"/"Show less" is not shown)
                       // and the text is truncated.
