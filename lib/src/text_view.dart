@@ -156,35 +156,38 @@ int _findSafeTruncationIndex(
     }
   }
 
-  // Check if we're cutting in the middle of a word
-  // If so, cut at the end of the word (if it's not too long, i.e., < 50 chars)
-  var adjustedIndex = desiredIndex;
-
   // Find the start of the current word by going backwards
   var wordStart = desiredIndex;
   while (wordStart > 0 && !_isWordBoundary(text[wordStart - 1])) {
     wordStart--;
   }
 
-  // Find the end of the current word by going forwards
-  var wordEnd = desiredIndex;
-  while (wordEnd < text.length && !_isWordBoundary(text[wordEnd])) {
-    wordEnd++;
-  }
+  // Cut at word start
+  return wordStart;
 
-  // Calculate word length
-  final wordLength = wordEnd - wordStart;
-
-  // If we're in the middle of a word and the word is not too long (< 50 chars),
-  // cut at the end of the word instead
-  if (wordLength > 0 &&
-      wordLength < 50 &&
-      desiredIndex > wordStart &&
-      desiredIndex < wordEnd) {
-    adjustedIndex = wordEnd;
-  }
-
-  return adjustedIndex;
+  // Check if we're cutting in the middle of a word
+  // If so, cut at the end of the word (if it's not too long, i.e., < 50 chars)
+  // var adjustedIndex = desiredIndex;
+  //
+  // // Find the end of the current word by going forwards
+  // var wordEnd = desiredIndex;
+  // while (wordEnd < text.length && !_isWordBoundary(text[wordEnd])) {
+  //   wordEnd++;
+  // }
+  //
+  // // Calculate word length
+  // final wordLength = wordEnd - wordStart;
+  //
+  // // If we're in the middle of a word and the word is not too long (< 50 chars),
+  // // cut at the end of the word instead
+  // if (wordLength > 0 &&
+  //     wordLength < 50 &&
+  //     desiredIndex > wordStart &&
+  //     desiredIndex < wordEnd) {
+  //   adjustedIndex = wordEnd;
+  // }
+  //
+  // return adjustedIndex;
 }
 
 /// Helper function to check if a character is a word boundary
