@@ -8,6 +8,239 @@ import 'package:flutter/services.dart';
 
 import 'models.dart';
 
+/// Represents a matched pattern in the text with its boundaries.
+class _PatternMatch {
+  final int start;
+  final int end;
+  final bool isUrl;
+  final bool isFormatting;
+
+  _PatternMatch({
+    required this.start,
+    required this.end,
+    required this.isUrl,
+    required this.isFormatting,
+  });
+
+  bool contains(int index) => index >= start && index < end;
+}
+
+/// Result of finding a safe truncation index.
+class _TruncationResult {
+  final int index;
+  final String? closingTags;
+
+  _TruncationResult({required this.index, this.closingTags});
+}
+
+/// Finds a safe truncation index that doesn't break markdown formatting, URLs, or words.
+///
+/// This function ensures that truncation doesn't happen:
+/// 1. In the middle of a URL - includes the entire URL (UrlParser handles shortening)
+/// 2. In the middle of markdown formatting tags - cuts before or after the formatted section
+/// 3. In the middle of a word - cuts at the end of the word (if word is < 50 characters)
+///
+/// [text] - The original text to truncate
+/// [desiredIndex] - The initial truncation index calculated by TextPainter
+/// [supportedTypes] - The list of parser types (contains regex patterns)
+/// [regexOptions] - Regex options for pattern matching
+///
+/// Returns an adjusted index that respects markdown, URL, and word boundaries.
+/// Also returns optional closing tags if the truncation occurs inside formatted text.
+_TruncationResult _findSafeTruncationIndex(
+  String text,
+  int desiredIndex,
+  List<ParserType> supportedTypes,
+  RegexOptions regexOptions,
+) {
+  // Early return if index is at the end or beyond
+  if (desiredIndex >= text.length) {
+    return _TruncationResult(index: text.length);
+  }
+
+  // Early return if index is at the start
+  if (desiredIndex <= 0) {
+    return _TruncationResult(index: 0);
+  }
+
+  // Build regex pattern from all parser types
+  final patternStrings = <String>[];
+  final urlPatterns = <String>[];
+  final formattingPatterns = <String>[];
+
+  for (var type in supportedTypes) {
+    if (type.pattern != null && type.pattern!.isNotEmpty) {
+      patternStrings.add(type.pattern!);
+
+      // Identify URL patterns (typically contain http, www, or are very long)
+      if (type.pattern!.contains(r'http') ||
+          type.pattern!.contains(r'www') ||
+          type.pattern!.length > 100) {
+        urlPatterns.add(type.pattern!);
+      } else if (type.pattern!.contains(r'*') ||
+          type.pattern!.contains(r'_') ||
+          type.pattern!.contains(r'~')) {
+        // Formatting patterns contain *, _, or ~
+        formattingPatterns.add(type.pattern!);
+      }
+    }
+  }
+
+  if (patternStrings.isEmpty) {
+    return _TruncationResult(index: desiredIndex);
+  }
+
+  // Find all matches in the text
+  final matches = <_PatternMatch>[];
+
+  for (var pattern in patternStrings) {
+    try {
+      final regex = RegExp(
+        pattern,
+        multiLine: regexOptions.multiLine,
+        caseSensitive: regexOptions.caseSensitive,
+        dotAll: regexOptions.dotAll,
+        unicode: regexOptions.unicode,
+      );
+
+      final isUrl = urlPatterns.contains(pattern);
+      final isFormatting = formattingPatterns.contains(pattern);
+
+      for (var match in regex.allMatches(text)) {
+        matches.add(_PatternMatch(
+          start: match.start,
+          end: match.end,
+          isUrl: isUrl,
+          isFormatting: isFormatting,
+        ));
+      }
+    } catch (e) {
+      // Skip invalid regex patterns
+      continue;
+    }
+  }
+
+  // Sort matches by start position
+  matches.sort((a, b) => a.start.compareTo(b.start));
+
+  // Check if desiredIndex falls within any match
+  for (var match in matches) {
+    if (match.contains(desiredIndex)) {
+      // For URLs, always cut before the URL to respect maxLines
+      // The UrlParser will handle shortening it with its built-in truncation
+      if (match.isUrl) {
+        return _TruncationResult(index: match.start);
+      }
+
+      // For formatting (bold, italic, etc.), cut at desiredIndex and append closing tag
+      if (match.isFormatting) {
+        final matchedText = text.substring(match.start, match.end);
+        final openingTag = _extractOpeningTag(matchedText);
+
+        if (openingTag != null) {
+          // Closing tag is the opening tag reversed
+          final closingTag = openingTag.split('').reversed.join('');
+          return _TruncationResult(
+              index: desiredIndex, closingTags: closingTag);
+        }
+
+        // Fallback: cut at desiredIndex without closing tags
+        return _TruncationResult(index: desiredIndex);
+      }
+    }
+  }
+
+  // If we're very close to the end of a match (within 3 characters),
+  // include the entire match to avoid awkward cuts like "**bol"
+  for (var match in matches) {
+    if (desiredIndex > match.start &&
+        desiredIndex < match.end &&
+        match.end - desiredIndex <= 3) {
+      // For URLs, cut before them to respect maxLines
+      if (match.isUrl) {
+        return _TruncationResult(index: match.start);
+      }
+      // For formatting, we already handled it above in the contains() check
+      // but as a safety, cut at desiredIndex with closing tag
+      if (match.isFormatting) {
+        final matchedText = text.substring(match.start, match.end);
+        final openingTag = _extractOpeningTag(matchedText);
+        if (openingTag != null) {
+          final closingTag = openingTag.split('').reversed.join('');
+          return _TruncationResult(
+              index: desiredIndex, closingTags: closingTag);
+        }
+      }
+    }
+  }
+
+  // Find the start of the current word by going backwards
+  var wordStart = desiredIndex;
+  while (wordStart > 0 && !_isWordBoundary(text[wordStart - 1])) {
+    wordStart--;
+  }
+
+  // Cut at word start
+  return _TruncationResult(index: wordStart);
+
+  // Check if we're cutting in the middle of a word
+  // If so, cut at the end of the word (if it's not too long, i.e., < 50 chars)
+  // var adjustedIndex = desiredIndex;
+  //
+  // // Find the end of the current word by going forwards
+  // var wordEnd = desiredIndex;
+  // while (wordEnd < text.length && !_isWordBoundary(text[wordEnd])) {
+  //   wordEnd++;
+  // }
+  //
+  // // Calculate word length
+  // final wordLength = wordEnd - wordStart;
+  //
+  // // If we're in the middle of a word and the word is not too long (< 50 chars),
+  // // cut at the end of the word instead
+  // if (wordLength > 0 &&
+  //     wordLength < 50 &&
+  //     desiredIndex > wordStart &&
+  //     desiredIndex < wordEnd) {
+  //   adjustedIndex = wordEnd;
+  // }
+  //
+  // return adjustedIndex;
+}
+
+/// Helper function to check if a character is a word boundary
+bool _isWordBoundary(String char) {
+  // Word boundaries: space, newline, tab, punctuation (except hyphen and apostrophe within words)
+  return char == ' ' ||
+      char == '\n' ||
+      char == '\t' ||
+      char == '.' ||
+      char == ',' ||
+      char == '!' ||
+      char == '?' ||
+      char == ';' ||
+      char == ':' ||
+      char == ')' ||
+      char == ']' ||
+      char == '}' ||
+      char == '"' ||
+      char == "'";
+}
+
+/// Extracts the opening formatting tag from a matched text.
+/// For example, "**bold text**" returns "**", "__*text*__" returns "__*".
+String? _extractOpeningTag(String matchedText) {
+  const formatChars = {'*', '_', '~'};
+
+  var i = 0;
+  while (i < matchedText.length && formatChars.contains(matchedText[i])) {
+    i++;
+  }
+
+  if (i == 0 || i == matchedText.length) return null;
+  return matchedText.substring(0, i);
+}
+
 /// Creates a [RichText] widget that supports emails, mentions, hashtags and more.
 ///
 /// When [viewLessText] is specified, toggling between view more and view less will be supported.
@@ -425,7 +658,7 @@ class _RichTextViewState extends State<RichTextView> {
 
               // Check if it's a UTF-16 surrogate (high or low).
               // https://github.com/flutter/flutter/blob/248d746575b713da74144750527356a1c0095546/packages/flutter/lib/src/painting/text_painter.dart#L603
-              bool isUtf16Surrogate = (lastCodeUnit & 0xF800) == 0xD800;
+              final isUtf16Surrogate = (lastCodeUnit & 0xF800) == 0xD800;
 
               if (isUtf16Surrogate) {
                 // We're in the middle of a character, take one more complete character.
@@ -438,10 +671,20 @@ class _RichTextViewState extends State<RichTextView> {
             }
           }
 
+          // Apply smart truncation to avoid cutting in the middle of URLs or markdown formatting
+          final truncationResult = _findSafeTruncationIndex(
+            widget.text,
+            adjustedEndIndex,
+            widget.supportedTypes,
+            widget.regexOptions,
+          );
+
           final textChildren = _expanded
               ? parseText(widget.text)
               : parseText(
-                  widget.text.substring(0, adjustedEndIndex) +
+                  widget.text.substring(0, truncationResult.index) +
+                      // Append closing tags if we cut inside formatted text
+                      (truncationResult.closingTags ?? '') +
                       // Append the ellipsis if `toggleTruncate` is false
                       // (i.e. "Show more"/"Show less" is not shown)
                       // and the text is truncated.
