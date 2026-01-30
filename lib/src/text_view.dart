@@ -25,6 +25,14 @@ class _PatternMatch {
   bool contains(int index) => index >= start && index < end;
 }
 
+/// Result of finding a safe truncation index.
+class _TruncationResult {
+  final int index;
+  final String? closingTags;
+
+  _TruncationResult({required this.index, this.closingTags});
+}
+
 /// Finds a safe truncation index that doesn't break markdown formatting, URLs, or words.
 ///
 /// This function ensures that truncation doesn't happen:
@@ -38,7 +46,8 @@ class _PatternMatch {
 /// [regexOptions] - Regex options for pattern matching
 ///
 /// Returns an adjusted index that respects markdown, URL, and word boundaries.
-int _findSafeTruncationIndex(
+/// Also returns optional closing tags if the truncation occurs inside formatted text.
+_TruncationResult _findSafeTruncationIndex(
   String text,
   int desiredIndex,
   List<ParserType> supportedTypes,
@@ -46,12 +55,12 @@ int _findSafeTruncationIndex(
 ) {
   // Early return if index is at the end or beyond
   if (desiredIndex >= text.length) {
-    return text.length;
+    return _TruncationResult(index: text.length);
   }
 
   // Early return if index is at the start
   if (desiredIndex <= 0) {
-    return 0;
+    return _TruncationResult(index: 0);
   }
 
   // Build regex pattern from all parser types
@@ -78,7 +87,7 @@ int _findSafeTruncationIndex(
   }
 
   if (patternStrings.isEmpty) {
-    return desiredIndex;
+    return _TruncationResult(index: desiredIndex);
   }
 
   // Find all matches in the text
@@ -117,26 +126,26 @@ int _findSafeTruncationIndex(
   // Check if desiredIndex falls within any match
   for (var match in matches) {
     if (match.contains(desiredIndex)) {
-      // For URLs, always include the entire URL
+      // For URLs, always cut before the URL to respect maxLines
       // The UrlParser will handle shortening it with its built-in truncation
       if (match.isUrl) {
-        return match.start;
+        return _TruncationResult(index: match.start);
       }
 
-      // For formatting (bold, italic, etc.), cut before the opening tag
+      // For formatting (bold, italic, etc.), cut at desiredIndex and append closing tag
       if (match.isFormatting) {
-        // Try to cut before the match starts
-        // But if that would remove too much content, cut after the match
-        final cutBefore = match.start;
-        final cutAfter = match.end;
+        final matchedText = text.substring(match.start, match.end);
+        final openingTag = _extractOpeningTag(matchedText);
 
-        // If cutting before would remove less than 50% of desired content, cut before
-        // Otherwise, include the entire formatted section
-        if (cutBefore >= desiredIndex * 0.5) {
-          return cutBefore;
-        } else {
-          return cutAfter;
+        if (openingTag != null) {
+          // Closing tag is the opening tag reversed
+          final closingTag = openingTag.split('').reversed.join('');
+          return _TruncationResult(
+              index: desiredIndex, closingTags: closingTag);
         }
+
+        // Fallback: cut at desiredIndex without closing tags
+        return _TruncationResult(index: desiredIndex);
       }
     }
   }
@@ -147,12 +156,21 @@ int _findSafeTruncationIndex(
     if (desiredIndex > match.start &&
         desiredIndex < match.end &&
         match.end - desiredIndex <= 3) {
-      // For URLs, always include them
+      // For URLs, cut before them to respect maxLines
       if (match.isUrl) {
-        return match.end;
+        return _TruncationResult(index: match.start);
       }
-      // For formatting, include the complete formatted section
-      return match.end;
+      // For formatting, we already handled it above in the contains() check
+      // but as a safety, cut at desiredIndex with closing tag
+      if (match.isFormatting) {
+        final matchedText = text.substring(match.start, match.end);
+        final openingTag = _extractOpeningTag(matchedText);
+        if (openingTag != null) {
+          final closingTag = openingTag.split('').reversed.join('');
+          return _TruncationResult(
+              index: desiredIndex, closingTags: closingTag);
+        }
+      }
     }
   }
 
@@ -163,7 +181,7 @@ int _findSafeTruncationIndex(
   }
 
   // Cut at word start
-  return wordStart;
+  return _TruncationResult(index: wordStart);
 
   // Check if we're cutting in the middle of a word
   // If so, cut at the end of the word (if it's not too long, i.e., < 50 chars)
@@ -207,6 +225,20 @@ bool _isWordBoundary(String char) {
       char == '}' ||
       char == '"' ||
       char == "'";
+}
+
+/// Extracts the opening formatting tag from a matched text.
+/// For example, "**bold text**" returns "**", "__*text*__" returns "__*".
+String? _extractOpeningTag(String matchedText) {
+  const formatChars = {'*', '_', '~'};
+
+  var i = 0;
+  while (i < matchedText.length && formatChars.contains(matchedText[i])) {
+    i++;
+  }
+
+  if (i == 0 || i == matchedText.length) return null;
+  return matchedText.substring(0, i);
 }
 
 /// Creates a [RichText] widget that supports emails, mentions, hashtags and more.
@@ -640,7 +672,7 @@ class _RichTextViewState extends State<RichTextView> {
           }
 
           // Apply smart truncation to avoid cutting in the middle of URLs or markdown formatting
-          final safeTruncationIndex = _findSafeTruncationIndex(
+          final truncationResult = _findSafeTruncationIndex(
             widget.text,
             adjustedEndIndex,
             widget.supportedTypes,
@@ -650,7 +682,9 @@ class _RichTextViewState extends State<RichTextView> {
           final textChildren = _expanded
               ? parseText(widget.text)
               : parseText(
-                  widget.text.substring(0, safeTruncationIndex) +
+                  widget.text.substring(0, truncationResult.index) +
+                      // Append closing tags if we cut inside formatted text
+                      (truncationResult.closingTags ?? '') +
                       // Append the ellipsis if `toggleTruncate` is false
                       // (i.e. "Show more"/"Show less" is not shown)
                       // and the text is truncated.
