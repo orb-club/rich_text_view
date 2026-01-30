@@ -120,7 +120,7 @@ int _findSafeTruncationIndex(
       // For URLs, always include the entire URL
       // The UrlParser will handle shortening it with its built-in truncation
       if (match.isUrl) {
-        return match.end;
+        return match.start;
       }
 
       // For formatting (bold, italic, etc.), cut before the opening tag
