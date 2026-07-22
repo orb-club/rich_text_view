@@ -1,3 +1,8 @@
+## [1.13.0]
+
+- Support measuring inline placeholder spans during truncation.
+- Avoid partial non-formatting pattern tokens when truncating.
+
 ##[1.6.0]
 - Support `toggleTruncate` parameter for toggling "Show Less" and "Show More" options.
 - Remove horizontal ellipsis "..." before "Show More" and "Show Less" buttons.
