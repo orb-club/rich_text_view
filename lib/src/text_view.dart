@@ -147,6 +147,10 @@ _TruncationResult _findSafeTruncationIndex(
         // Fallback: cut at desiredIndex without closing tags
         return _TruncationResult(index: desiredIndex);
       }
+
+      // Any other matched pattern is an atomic token (mention, hashtag,
+      // shortcode, email): never cut inside it — cut before it, like URLs.
+      return _TruncationResult(index: match.start);
     }
   }
 
@@ -263,6 +267,13 @@ class RichTextView extends StatefulWidget {
   final bool truncate;
   final double? prefixIconWidth;
 
+  /// Uniform dimensions assumed for every inline placeholder (e.g. WidgetSpan)
+  /// produced by [supportedTypes] parsers when measuring content for
+  /// truncation. Without this, truncation measurement cannot lay out
+  /// placeholder spans. Does not apply to [prefixWidgetSpan], which is
+  /// estimated separately via [prefixIconWidth].
+  final PlaceholderDimensions? placeholderDimensions;
+
   /// the view more text if `truncate` is true
   final String viewMoreText;
 
@@ -307,6 +318,7 @@ class RichTextView extends StatefulWidget {
     this.selectable = false,
     this.prefixWidgetSpan,
     this.prefixIconWidth,
+    this.placeholderDimensions,
   }) : super(key: key);
 
   @override
@@ -613,6 +625,21 @@ class _RichTextViewState extends State<RichTextView> {
 
         // First measure content without the prefix to avoid WidgetSpan dimension issues
         textPainter.text = content;
+        if (widget.placeholderDimensions != null) {
+          var placeholderCount = 0;
+          content.visitChildren((child) {
+            if (child is PlaceholderSpan) placeholderCount++;
+            return true;
+          });
+          if (placeholderCount > 0) {
+            textPainter.setPlaceholderDimensions(
+              List<PlaceholderDimensions>.filled(
+                placeholderCount,
+                widget.placeholderDimensions!,
+              ),
+            );
+          }
+        }
         textPainter.layout(minWidth: constraints.minWidth, maxWidth: maxWidth);
         final contentSize = textPainter.size;
         final contentExceedsMaxLines = textPainter.didExceedMaxLines;
