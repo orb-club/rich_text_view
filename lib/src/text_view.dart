@@ -147,6 +147,10 @@ _TruncationResult _findSafeTruncationIndex(
         // Fallback: cut at desiredIndex without closing tags
         return _TruncationResult(index: desiredIndex);
       }
+
+      // Any other matched pattern is an atomic token (mention, hashtag,
+      // shortcode, email): never cut inside it — cut before it, like URLs.
+      return _TruncationResult(index: match.start);
     }
   }
 
