@@ -283,6 +283,39 @@ void main() {
         expect(displayedText, isNot(contains('*')), reason: 'offset $offset');
       }
     });
+
+    testWidgets('Keeps text after formatting that fits before the cut',
+        (WidgetTester tester) async {
+      // Markers are not rendered, so the measured cut must be mapped back to
+      // the raw text instead of being applied to it directly.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 200),
+                child: RichTextView(
+                  text: 'see: **what is new**.\n\nnext paragraph here',
+                  truncate: true,
+                  toggleTruncate: true,
+                  viewMoreText: 'Show More',
+                  maxLines: 2,
+                  style: const TextStyle(fontSize: 10),
+                  supportedTypes: [BoldParser()],
+                  linkStyle: const TextStyle(color: Colors.blue),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final richTextWidget = tester.widget<RichText>(find.byType(RichText));
+      final displayedText = richTextWidget.text.toPlainText();
+
+      expect(displayedText, 'see: what is new. Show More');
+    });
   });
 }
 

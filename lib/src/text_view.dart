@@ -33,6 +33,42 @@ class _TruncationResult {
   _TruncationResult({required this.index, this.closingTags});
 }
 
+/// A run of the original text and the range of rendered text it produced.
+class _Segment {
+  final int start;
+  final int end;
+  final int visibleStart;
+  final int visibleEnd;
+
+  /// Where the rendered text starts within the original run, or null when it
+  /// is not a verbatim slice of it (e.g. a shortened URL or a placeholder).
+  final int? visibleOffset;
+
+  _Segment({
+    required this.start,
+    required this.end,
+    required this.visibleStart,
+    required this.visibleEnd,
+    required this.visibleOffset,
+  });
+}
+
+/// Maps an index in the rendered text back to the original text.
+///
+/// Parsers strip or replace syntax (e.g. bold markers), so positions measured
+/// by a [TextPainter] can't be applied to the original text directly.
+int _toOriginalIndex(List<_Segment> segments, int visibleIndex) {
+  for (var segment in segments) {
+    if (visibleIndex >= segment.visibleEnd) continue;
+    if (visibleIndex <= segment.visibleStart) return segment.start;
+
+    final offset = segment.visibleOffset;
+    if (offset == null) return segment.start;
+    return segment.start + offset + visibleIndex - segment.visibleStart;
+  }
+  return segments.isEmpty ? visibleIndex : segments.last.end;
+}
+
 /// Finds a safe truncation index that doesn't break markdown formatting, URLs, or words.
 ///
 /// This function ensures that truncation doesn't happen:
@@ -410,8 +446,25 @@ class _RichTextViewState extends State<RichTextView> {
             style: widget.viewMoreLessStyle ?? linkStyle,
           );
 
-    List<InlineSpan> parseText(String txt) {
+    List<InlineSpan> parseText(String txt, [List<_Segment>? segments]) {
       var newString = txt;
+      var segmentStart = 0;
+      var segmentVisibleStart = 0;
+
+      void addSegment(String originalText, InlineSpan span) {
+        final rendered = span.toPlainText(includeSemanticsLabels: false);
+        final visibleOffset = originalText.indexOf(rendered);
+        final segment = _Segment(
+          start: segmentStart,
+          end: segmentStart + originalText.length,
+          visibleStart: segmentVisibleStart,
+          visibleEnd: segmentVisibleStart + rendered.length,
+          visibleOffset: visibleOffset < 0 ? null : visibleOffset,
+        );
+        segments?.add(segment);
+        segmentStart = segment.end;
+        segmentVisibleStart = segment.visibleEnd;
+      }
 
       var _mapping = <String, ParserType>{};
 
@@ -595,6 +648,7 @@ class _RichTextViewState extends State<RichTextView> {
               },
             );
           }
+          addSegment(matchText, span);
           widgets.add(span);
           return '';
         },
@@ -612,10 +666,12 @@ class _RichTextViewState extends State<RichTextView> {
             },
           );
 
-          widgets.add(TextSpan(
+          final span = TextSpan(
             text: '$text',
             style: _style,
-          ));
+          );
+          addSegment(text, span);
+          widgets.add(span);
 
           return '';
         },
@@ -623,7 +679,11 @@ class _RichTextViewState extends State<RichTextView> {
       return widgets;
     }
 
-    final content = TextSpan(children: parseText(widget.text), style: _style);
+    final segments = <_Segment>[];
+    final content = TextSpan(
+      children: parseText(widget.text, segments),
+      style: _style,
+    );
 
     Widget result = LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -694,8 +754,10 @@ class _RichTextViewState extends State<RichTextView> {
           ));
           final endIndex = textPainter.getOffsetBefore(pos.offset);
 
-          // Adjust the endIndex to account for the prefix
-          var adjustedEndIndex = max(0, endIndex ?? 0);
+          // Map the measured index back to the original text, which can be
+          // longer than what is rendered (e.g. bold markers).
+          var adjustedEndIndex =
+              _toOriginalIndex(segments, max(0, endIndex ?? 0));
 
           // Check if we're cutting in the middle of an emoji/grapheme cluster.
           if (adjustedEndIndex > 0 && adjustedEndIndex < widget.text.length) {
