@@ -195,6 +195,17 @@ _TruncationResult _findSafeTruncationIndex(
     wordStart--;
   }
 
+  // Walking back must not land inside formatted text glued to the current word
+  // (e.g. "**What’s New**’s"), which would leave its opening marker unclosed.
+  // The section ends before desiredIndex, so keep it whole instead.
+  for (var match in matches) {
+    if (match.isFormatting &&
+        match.start < wordStart &&
+        wordStart < match.end) {
+      return _TruncationResult(index: match.end);
+    }
+  }
+
   // Cut at word start
   return _TruncationResult(index: wordStart);
 

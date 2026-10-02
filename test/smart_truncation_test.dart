@@ -257,7 +257,7 @@ void main() {
       // at a time sweeps the cut through the opening marker, the content and
       // the closing marker.
       for (var offset = 0; offset <= 20; offset++) {
-        final testText = '${'a' * offset}**cccc**${'d' * 60}';
+        final testText = '${'a' * offset}**cc cc**${'d' * 60}';
 
         await tester.pumpWidget(
           MaterialApp(
