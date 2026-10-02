@@ -33,6 +33,42 @@ class _TruncationResult {
   _TruncationResult({required this.index, this.closingTags});
 }
 
+/// A run of the original text and the range of rendered text it produced.
+class _Segment {
+  final int start;
+  final int end;
+  final int visibleStart;
+  final int visibleEnd;
+
+  /// Where the rendered text starts within the original run, or null when it
+  /// is not a verbatim slice of it (e.g. a shortened URL or a placeholder).
+  final int? visibleOffset;
+
+  _Segment({
+    required this.start,
+    required this.end,
+    required this.visibleStart,
+    required this.visibleEnd,
+    required this.visibleOffset,
+  });
+}
+
+/// Maps an index in the rendered text back to the original text.
+///
+/// Parsers strip or replace syntax (e.g. bold markers), so positions measured
+/// by a [TextPainter] can't be applied to the original text directly.
+int _toOriginalIndex(List<_Segment> segments, int visibleIndex) {
+  for (var segment in segments) {
+    if (visibleIndex >= segment.visibleEnd) continue;
+    if (visibleIndex <= segment.visibleStart) return segment.start;
+
+    final offset = segment.visibleOffset;
+    if (offset == null) return segment.start;
+    return segment.start + offset + visibleIndex - segment.visibleStart;
+  }
+  return segments.isEmpty ? visibleIndex : segments.last.end;
+}
+
 /// Finds a safe truncation index that doesn't break markdown formatting, URLs, or words.
 ///
 /// This function ensures that truncation doesn't happen:
@@ -138,6 +174,17 @@ _TruncationResult _findSafeTruncationIndex(
         final openingTag = _extractOpeningTag(matchedText);
 
         if (openingTag != null) {
+          // Never cut inside a marker: a partial marker followed by the
+          // appended closing tag (e.g. "**bold*" + "**") no longer parses.
+          if (desiredIndex <= match.start + openingTag.length) {
+            return _TruncationResult(index: match.start);
+          }
+          // Markers are not rendered, so keeping the whole match when cutting
+          // inside its closing marker shows exactly the text that fit.
+          if (desiredIndex >= match.end - openingTag.length) {
+            return _TruncationResult(index: match.end);
+          }
+
           // Closing tag is the opening tag reversed
           final closingTag = openingTag.split('').reversed.join('');
           return _TruncationResult(
@@ -147,6 +194,10 @@ _TruncationResult _findSafeTruncationIndex(
         // Fallback: cut at desiredIndex without closing tags
         return _TruncationResult(index: desiredIndex);
       }
+
+      // Any other matched pattern is an atomic token (mention, hashtag,
+      // shortcode, email): never cut inside it — cut before it, like URLs.
+      return _TruncationResult(index: match.start);
     }
   }
 
@@ -178,6 +229,17 @@ _TruncationResult _findSafeTruncationIndex(
   var wordStart = desiredIndex;
   while (wordStart > 0 && !_isWordBoundary(text[wordStart - 1])) {
     wordStart--;
+  }
+
+  // Walking back must not land inside formatted text glued to the current word
+  // (e.g. "**What’s New**’s"), which would leave its opening marker unclosed.
+  // The section ends before desiredIndex, so keep it whole instead.
+  for (var match in matches) {
+    if (match.isFormatting &&
+        match.start < wordStart &&
+        wordStart < match.end) {
+      return _TruncationResult(index: match.end);
+    }
   }
 
   // Cut at word start
@@ -263,6 +325,13 @@ class RichTextView extends StatefulWidget {
   final bool truncate;
   final double? prefixIconWidth;
 
+  /// Uniform dimensions assumed for every inline placeholder (e.g. WidgetSpan)
+  /// produced by [supportedTypes] parsers when measuring content for
+  /// truncation. Without this, truncation measurement cannot lay out
+  /// placeholder spans. Does not apply to [prefixWidgetSpan], which is
+  /// estimated separately via [prefixIconWidth].
+  final PlaceholderDimensions? placeholderDimensions;
+
   /// the view more text if `truncate` is true
   final String viewMoreText;
 
@@ -307,6 +376,7 @@ class RichTextView extends StatefulWidget {
     this.selectable = false,
     this.prefixWidgetSpan,
     this.prefixIconWidth,
+    this.placeholderDimensions,
   }) : super(key: key);
 
   @override
@@ -376,8 +446,25 @@ class _RichTextViewState extends State<RichTextView> {
             style: widget.viewMoreLessStyle ?? linkStyle,
           );
 
-    List<InlineSpan> parseText(String txt) {
+    List<InlineSpan> parseText(String txt, [List<_Segment>? segments]) {
       var newString = txt;
+      var segmentStart = 0;
+      var segmentVisibleStart = 0;
+
+      void addSegment(String originalText, InlineSpan span) {
+        final rendered = span.toPlainText(includeSemanticsLabels: false);
+        final visibleOffset = originalText.indexOf(rendered);
+        final segment = _Segment(
+          start: segmentStart,
+          end: segmentStart + originalText.length,
+          visibleStart: segmentVisibleStart,
+          visibleEnd: segmentVisibleStart + rendered.length,
+          visibleOffset: visibleOffset < 0 ? null : visibleOffset,
+        );
+        segments?.add(segment);
+        segmentStart = segment.end;
+        segmentVisibleStart = segment.visibleEnd;
+      }
 
       var _mapping = <String, ParserType>{};
 
@@ -561,6 +648,7 @@ class _RichTextViewState extends State<RichTextView> {
               },
             );
           }
+          addSegment(matchText, span);
           widgets.add(span);
           return '';
         },
@@ -578,10 +666,12 @@ class _RichTextViewState extends State<RichTextView> {
             },
           );
 
-          widgets.add(TextSpan(
+          final span = TextSpan(
             text: '$text',
             style: _style,
-          ));
+          );
+          addSegment(text, span);
+          widgets.add(span);
 
           return '';
         },
@@ -589,7 +679,11 @@ class _RichTextViewState extends State<RichTextView> {
       return widgets;
     }
 
-    final content = TextSpan(children: parseText(widget.text), style: _style);
+    final segments = <_Segment>[];
+    final content = TextSpan(
+      children: parseText(widget.text, segments),
+      style: _style,
+    );
 
     Widget result = LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -613,6 +707,21 @@ class _RichTextViewState extends State<RichTextView> {
 
         // First measure content without the prefix to avoid WidgetSpan dimension issues
         textPainter.text = content;
+        if (widget.placeholderDimensions != null) {
+          var placeholderCount = 0;
+          content.visitChildren((child) {
+            if (child is PlaceholderSpan) placeholderCount++;
+            return true;
+          });
+          if (placeholderCount > 0) {
+            textPainter.setPlaceholderDimensions(
+              List<PlaceholderDimensions>.filled(
+                placeholderCount,
+                widget.placeholderDimensions!,
+              ),
+            );
+          }
+        }
         textPainter.layout(minWidth: constraints.minWidth, maxWidth: maxWidth);
         final contentSize = textPainter.size;
         final contentExceedsMaxLines = textPainter.didExceedMaxLines;
@@ -645,8 +754,10 @@ class _RichTextViewState extends State<RichTextView> {
           ));
           final endIndex = textPainter.getOffsetBefore(pos.offset);
 
-          // Adjust the endIndex to account for the prefix
-          var adjustedEndIndex = max(0, endIndex ?? 0);
+          // Map the measured index back to the original text, which can be
+          // longer than what is rendered (e.g. bold markers).
+          var adjustedEndIndex =
+              _toOriginalIndex(segments, max(0, endIndex ?? 0));
 
           // Check if we're cutting in the middle of an emoji/grapheme cluster.
           if (adjustedEndIndex > 0 && adjustedEndIndex < widget.text.length) {
