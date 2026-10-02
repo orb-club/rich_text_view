@@ -138,6 +138,17 @@ _TruncationResult _findSafeTruncationIndex(
         final openingTag = _extractOpeningTag(matchedText);
 
         if (openingTag != null) {
+          // Never cut inside a marker: a partial marker followed by the
+          // appended closing tag (e.g. "**bold*" + "**") no longer parses.
+          if (desiredIndex <= match.start + openingTag.length) {
+            return _TruncationResult(index: match.start);
+          }
+          // Markers are not rendered, so keeping the whole match when cutting
+          // inside its closing marker shows exactly the text that fit.
+          if (desiredIndex >= match.end - openingTag.length) {
+            return _TruncationResult(index: match.end);
+          }
+
           // Closing tag is the opening tag reversed
           final closingTag = openingTag.split('').reversed.join('');
           return _TruncationResult(
